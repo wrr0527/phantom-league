@@ -114,6 +114,9 @@ const GIVEN_W=[
   ["道",1],["則",1],["邦",1],["郁",1],["寛",1],["格",1],["亨",1],["侑",1],["勇",1],["朗",1],
   ["寿",1],["諒",1],["廉",1],["嶺",1],["汰",1],["斗",1],["叶",1],["奏",1],["蒼汰",1],["陽汰",1],
 ];
+// NPB年齢分布（18〜36歳）
+const AGE_W=[[18,3],[19,5],[20,7],[21,9],[22,10],[23,10],[24,9],[25,8],[26,7],[27,6],[28,5],[29,4],[30,4],[31,3],[32,2],[33,2],[34,1],[35,1],[36,1]];
+const _pickAge=_mkPicker(AGE_W);
 const POSITIONS = ["C","1B","2B","3B","SS","LF","CF","RF","DH"];
 const POS_WEIGHT = {
   C:    { bat:0.5, def:1.5 },
@@ -160,12 +163,14 @@ const emptyCareerPit=()=>({seasons:0,IP:0,H:0,HR:0,BB:0,SO:0,ER:0,W:0,L:0,SV:0,G
 // デフォルトはオールE(=43前後)の控え級。主力だけ後から査定する想定で初期設定の手間を減らす
 const E_BASE=43;
 function eVal(){return clamp(E_BASE+Math.round(randn()*4),1,99);}
-function makeBatter(age=22,order=0){return {id:newId(),name:randName(),age,kind:"bat",contact:eVal(),power:eVal(),eye:eVal(),speed:eVal(),order,bats:rnd()<0.54?"R":rnd()<0.97?"L":"S",position:"LF",defense:eVal(),foreign:false,farm:false,status:"active",teamId:null,yearsOnTeam:0,overseasReturn:0,init:emptyCareerBat()};}
+function makeBatter(age,order=0){if(age===undefined)age=_pickAge();return {id:newId(),name:randName(),age,kind:"bat",contact:eVal(),power:eVal(),eye:eVal(),speed:eVal(),order,bats:rnd()<0.54?"R":rnd()<0.97?"L":"S",position:"LF",defense:eVal(),foreign:false,farm:false,status:"active",teamId:null,yearsOnTeam:0,overseasReturn:0,init:emptyCareerBat()};}
 const DIR_NAME={"→":"スライダー系","↙":"シンカー系","↓":"フォーク系","↘":"カーブ系","←":"シュート系"};
 const KIRE_GRADE=["S","A","B","C","D","E","G"]; // index 0=kire7(最高), index 6=kire1(最低)
 const kireToGrade=k=>KIRE_GRADE[7-(k||3)];
 const gradeToKire=g=>7-KIRE_GRADE.indexOf(g);
-function makePitcher(age=22,role,rotation=0){return {id:newId(),name:randName(),age,kind:"pit",stuff:eVal(),control:eVal(),stamina:eVal(),role:role||(rnd()<0.5?"SP":"RP"),rotation,throws:rnd()<0.75?"R":"L",pitches:[{dir:"→",henka:3,kire:3}],foreign:false,farm:false,status:"active",teamId:null,yearsOnTeam:0,overseasReturn:0,init:emptyCareerPit()};}
+const OFFSPEED_DIRS=["↘","↓","↙","←"];
+function randPitches(){const d=OFFSPEED_DIRS[Math.floor(rnd()*OFFSPEED_DIRS.length)];const rv=()=>2+Math.floor(rnd()*4);return [{dir:"→",henka:3,kire:3},{dir:d,henka:rv(),kire:rv()}];}
+function makePitcher(age,role,rotation=0){if(age===undefined)age=_pickAge();return {id:newId(),name:randName(),age,kind:"pit",stuff:eVal(),control:eVal(),stamina:eVal(),role:role||(rnd()<0.5?"SP":"RP"),rotation,throws:rnd()<0.75?"R":"L",pitches:randPitches(),foreign:false,farm:false,status:"active",teamId:null,yearsOnTeam:0,overseasReturn:0,init:emptyCareerPit()};}
 
 // 変化球パラメータ→投手能力の実効補正
 function pitchBonus(p){
@@ -183,8 +188,8 @@ function pitcherFromOverall(name,age,rank,role){const base=RANK_VAL[rank]??63;co
 function initLeague(){
   UID=0;const teams=[];const pool={};
   for(let t=0;t<NUM_TEAMS;t++){const league=t<NUM_TEAMS/2?"central":"pacific";const tm={id:t,name:`Team ${String.fromCharCode(65+t)}`,league,batterIds:[],pitcherIds:[]};
-    for(let i=0;i<BATTERS_PER_TEAM;i++){const b=makeBatter(22+Math.floor(rnd()*10), i<9?i+1:0);b.teamId=t;b.yearsOnTeam=Math.min(b.age-21,Math.floor(rnd()*6));pool[b.id]=b;tm.batterIds.push(b.id);}
-    for(let i=0;i<PITCHERS_PER_TEAM;i++){const role=i<ROTATION_SIZE?"SP":"RP";let rotation;if(i<ROTATION_SIZE){rotation=i+1;}else if(i===ROTATION_SIZE+5){rotation=ROTATION_CLOSER_MIN;}else if(i>ROTATION_SIZE+5){rotation=0;}else{rotation=ROTATION_RP_MIN+(i-ROTATION_SIZE);}const p=makePitcher(22+Math.floor(rnd()*10),role,rotation);p.teamId=t;p.yearsOnTeam=Math.min(p.age-21,Math.floor(rnd()*6));pool[p.id]=p;tm.pitcherIds.push(p.id);}
+    for(let i=0;i<BATTERS_PER_TEAM;i++){const b=makeBatter(undefined, i<9?i+1:0);b.teamId=t;b.yearsOnTeam=Math.max(0,Math.min(b.age-18,Math.floor(rnd()*8)));pool[b.id]=b;tm.batterIds.push(b.id);}
+    for(let i=0;i<PITCHERS_PER_TEAM;i++){const role=i<ROTATION_SIZE?"SP":"RP";let rotation;if(i<ROTATION_SIZE){rotation=i+1;}else if(i===ROTATION_SIZE+5){rotation=ROTATION_CLOSER_MIN;}else if(i>ROTATION_SIZE+5){rotation=0;}else{rotation=ROTATION_RP_MIN+(i-ROTATION_SIZE);}const p=makePitcher(undefined,role,rotation);p.teamId=t;p.yearsOnTeam=Math.max(0,Math.min(p.age-18,Math.floor(rnd()*8)));pool[p.id]=p;tm.pitcherIds.push(p.id);}
     teams.push(tm);}
   // 初期だけ：主力(スタメン9・先発6・抑え)をC〜A相当に底上げ。控え/2軍候補はEのまま残す
   const starterVal=()=>clamp(58+Math.round(randn()*12),35,92); // 中心63(C)前後、上はA級まで
@@ -679,7 +684,7 @@ function importLeague(text){UID=0;const teams=[];const pool={};let cur=null;cons
     if(tag==="T"){const lg=(c[2]||"").toUpperCase()==="P"?"pacific":(((c[2]||"").toUpperCase()==="C")?"central":null);cur={id:teams.length,name:c[1]||`Team ${teams.length+1}`,league:lg,batterIds:[],pitcherIds:[]};teams.push(cur);}
     else if(tag==="B"&&cur){const b=makeBatter(Number(c[2])||25,Number(c[7])||0);b.name=c[1]||randName();b.contact=parseAbility(c[3]);b.power=parseAbility(c[4]);b.eye=parseAbility(c[5]);b.speed=parseAbility(c[6]);b.init={...emptyCareerBat(),HR:Number(c[8])||0,H:Number(c[9])||0,seasons:Number(c[10])||0,games:(Number(c[10])||0)*120,AB:(Number(c[9])||0)*3,PA:Math.round((Number(c[9])||0)*3.4),RBI:Math.round((Number(c[8])||0)*2.5)};b.foreign=(c[11]||"").toUpperCase()==="F";b.farm=(c[12]||"")==="2";b.teamId=cur.id;b.yearsOnTeam=Math.min(b.age-21,Number(c[10])||0);pool[b.id]=b;cur.batterIds.push(b.id);}
     else if(tag==="P"&&cur){const role=(c[6]||"").includes("救")||((c[6]||"").toUpperCase()==="RP")?"RP":"SP";const p=makePitcher(Number(c[2])||25,role,Number(c[7])||0);p.name=c[1]||randName();p.stuff=parseAbility(c[3]);p.control=parseAbility(c[4]);p.stamina=parseAbility(c[5]);const pt=(c[8]||"").split("|").map(s=>s.trim()).filter(Boolean);if(pt.length) p.pitches=pt.map(seg=>{const parts=seg.split(":");const[dir,henka,kire]=parts.length>=4?parts.slice(1):parts;if(!dir) return {dir:"→",henka:3,kire:3};return {dir:dir||"→",henka:Number(henka)||3,kire:Number(kire)||3};});p.init={...emptyCareerPit(),W:Number(c[9])||0,SO:Number(c[10])||0,seasons:Number(c[11])||0,G:(Number(c[11])||0)*25,IP:(Number(c[10])||0)*1.1};p.foreign=(c[12]||"").toUpperCase()==="F";p.farm=(c[13]||"")==="2";p.teamId=cur.id;p.yearsOnTeam=Math.min(p.age-21,Number(c[11])||0);pool[p.id]=p;cur.pitcherIds.push(p.id);}});
-  teams.forEach(tm=>{while(tm.batterIds.length<BATTERS_PER_TEAM){const b=makeBatter(22,0);b.teamId=tm.id;pool[b.id]=b;tm.batterIds.push(b.id);}while(tm.pitcherIds.length<PITCHERS_PER_TEAM){const p=makePitcher(22,tm.pitcherIds.length<5?"SP":"RP");p.teamId=tm.id;pool[p.id]=p;tm.pitcherIds.push(p.id);}});
+  teams.forEach(tm=>{while(tm.batterIds.length<BATTERS_PER_TEAM){const b=makeBatter();b.teamId=tm.id;pool[b.id]=b;tm.batterIds.push(b.id);}while(tm.pitcherIds.length<PITCHERS_PER_TEAM){const p=makePitcher(undefined,tm.pitcherIds.length<5?"SP":"RP");p.teamId=tm.id;pool[p.id]=p;tm.pitcherIds.push(p.id);}});
   // リーグ未指定なら前半セ・後半パ。farm未指定があればassignFarmで再編
   teams.forEach((tm,i)=>{if(!tm.league)tm.league=i<teams.length/2?"central":"pacific";});
   const anyFarmSet=Object.values(pool).some(p=>p.farm);
@@ -837,9 +842,9 @@ export default function App(){
   const addPitch=(id)=>setState(s=>{const pool={...s.pool};const p=pool[id];if((p.pitches||[]).length>=5) return s;pool[id]={...p,pitches:[...(p.pitches||[]),{dir:"→",henka:3,kire:3}]};return {...s,pool};});
   const removePitch=(id,idx)=>setState(s=>{const pool={...s.pool};const p=pool[id];pool[id]={...p,pitches:p.pitches.filter((_,i)=>i!==idx)};return {...s,pool};});
 
-  const addBatter=(teamId)=>setState(s=>{const b=makeBatter(22,0);b.teamId=teamId;const pool={...s.pool,[b.id]:b};const teams=s.teams.map(t=>t.id===teamId?{...t,batterIds:[...t.batterIds,b.id]}:t);return{...s,pool,teams};});
+  const addBatter=(teamId)=>setState(s=>{const b=makeBatter();b.teamId=teamId;const pool={...s.pool,[b.id]:b};const teams=s.teams.map(t=>t.id===teamId?{...t,batterIds:[...t.batterIds,b.id]}:t);return{...s,pool,teams};});
   const removeBatter=(teamId,bid)=>setState(s=>{const pool={...s.pool};delete pool[bid];const teams=s.teams.map(t=>t.id===teamId?{...t,batterIds:t.batterIds.filter(x=>x!==bid)}:t);return{...s,pool,teams};});
-  const addPitcher=(teamId)=>setState(s=>{const p=makePitcher(22,"RP",0);p.teamId=teamId;const pool={...s.pool,[p.id]:p};const teams=s.teams.map(t=>t.id===teamId?{...t,pitcherIds:[...t.pitcherIds,p.id]}:t);return{...s,pool,teams};});
+  const addPitcher=(teamId)=>setState(s=>{const p=makePitcher(undefined,"RP",0);p.teamId=teamId;const pool={...s.pool,[p.id]:p};const teams=s.teams.map(t=>t.id===teamId?{...t,pitcherIds:[...t.pitcherIds,p.id]}:t);return{...s,pool,teams};});
   const removePitcher=(teamId,pid)=>setState(s=>{const pool={...s.pool};delete pool[pid];const teams=s.teams.map(t=>t.id===teamId?{...t,pitcherIds:t.pitcherIds.filter(x=>x!==pid)}:t);return{...s,pool,teams};});
   const updateConfig=(field,val)=>setState(s=>({...s,config:{...(s.config||DEFAULT_CONFIG),[field]:field==="leagueNameC"||field==="leagueNameP"?val:Number(val)}}));
 
@@ -972,9 +977,9 @@ export default function App(){
           {(()=>{const cfg=state.config||DEFAULT_CONFIG;const batLim=cfg.battersPerTeam||BATTERS_PER_TEAM;const pitLim=cfg.pitchersPerTeam||PITCHERS_PER_TEAM;const bat1=t.batterIds.map(id=>state.pool[id]).filter(p=>p&&!p.farm).length;const pit1=t.pitcherIds.map(id=>state.pool[id]).filter(p=>p&&!p.farm&&p.rotation!==0).length;const batTotal=t.batterIds.map(id=>state.pool[id]).filter(Boolean).length;const pitTotal=t.pitcherIds.map(id=>state.pool[id]).filter(Boolean).length;return(<div style={{display:"flex",gap:12,alignItems:"center",margin:"10px 0 4px",flexWrap:"wrap"}}><span style={{fontSize:12,color:"#7a8a7a"}}>野手</span><span style={{fontSize:13,fontWeight:"bold",color:"#7ec87e"}}>{bat1}</span><span style={{fontSize:11,color:"#7a8a7a"}}>1軍</span><span style={{fontSize:12,color:"#7a8a7a"}}>/</span><span style={{fontSize:13,fontWeight:"bold",color:"#d8e0d8"}}>{batTotal}</span><span style={{fontSize:11,color:"#7a8a7a"}}>全　</span><span style={{fontSize:12,color:"#7a8a7a"}}>投手</span><span style={{fontSize:13,fontWeight:"bold",color:"#7ec87e"}}>{pit1}</span><span style={{fontSize:11,color:"#7a8a7a"}}>1軍</span><span style={{fontSize:12,color:"#7a8a7a"}}>/</span><span style={{fontSize:13,fontWeight:"bold",color:"#d8e0d8"}}>{pitTotal}</span><span style={{fontSize:11,color:"#7a8a7a"}}>全</span></div>);})()}
           <div style={S.sectionLabel}>野手 — 打順 / 打 / 守位 / 守備 / 年齢 / ミート / パワー / 選球眼 / 走力 / 総合{showInit?" ｜ HR/安/年":""}</div>
           <div style={S.scrollX}><table style={S.editTable}><tbody>
-            <tr style={S.editHead}><td style={S.stickyCol1}>打順</td><td style={S.stickyCol2}>名前</td><td>打</td><td>守位</td><td>守備</td><td>外</td><td>2軍</td><td>年</td><td>ミート</td><td>パワー</td><td>選球</td><td>走力</td><td>総合</td>{showInit&&<><td>HR</td><td>安</td><td>年</td></>}<td></td></tr>
-            {t.batterIds.map(id=>state.pool[id]).filter(Boolean).slice().sort((a,b)=>{const aS=a.order>=1&&a.order<=9;const bS=b.order>=1&&b.order<=9;if(aS&&!bS)return -1;if(!aS&&bS)return 1;if(aS&&bS)return a.order-b.order;const ai=POSITIONS.indexOf(a.position||"LF");const bi=POSITIONS.indexOf(b.position||"LF");return(ai===-1?99:ai)-(bi===-1?99:bi);}).map(b=>(<tr key={b.id}>
-              <td style={S.stickyCol1}><select style={S.numIn} value={b.order||0} onChange={e=>{const ord=Number(e.target.value);setState(s=>{const pool={...s.pool};const oldOrd=pool[b.id].order||0;if(ord!==0){const displaced=t.batterIds.find(id=>id!==b.id&&pool[id]&&pool[id].order===ord);if(displaced)pool[displaced]={...pool[displaced],order:oldOrd};}pool[b.id]={...pool[b.id],order:ord};return{...s,pool};});}}><option value={0}>0</option><option value={1}>1</option><option value={2}>2</option><option value={3}>3</option><option value={4}>4</option><option value={5}>5</option><option value={6}>6</option><option value={7}>7</option><option value={8}>8</option><option value={9}>9</option></select></td>
+            <tr style={S.editHead}><td style={S.stickyCol1}>打順</td><td style={S.stickyCol2}>名前</td><td>打</td><td>守位</td><td>守備</td><td>外</td><td>年</td><td>ミート</td><td>パワー</td><td>選球</td><td>走力</td><td>総合</td>{showInit&&<><td>HR</td><td>安</td><td>年</td></>}<td></td></tr>
+            {t.batterIds.map(id=>state.pool[id]).filter(Boolean).slice().sort((a,b)=>{const aS=a.order>=1&&a.order<=9;const bS=b.order>=1&&b.order<=9;if(aS&&!bS)return -1;if(!aS&&bS)return 1;if(aS&&bS)return a.order-b.order;if(a.farm&&!b.farm)return 1;if(!a.farm&&b.farm)return -1;const ai=POSITIONS.indexOf(a.position||"LF");const bi=POSITIONS.indexOf(b.position||"LF");return(ai===-1?99:ai)-(bi===-1?99:bi);}).map(b=>(<tr key={b.id}>
+              <td style={S.stickyCol1}><select style={S.numIn} value={b.farm?"farm":b.order||0} onChange={e=>{const v=e.target.value;setState(s=>{const pool={...s.pool};if(v==="farm"){pool[b.id]={...pool[b.id],order:0,farm:true};}else{const ord=Number(v);const oldOrd=pool[b.id].order||0;if(ord!==0){const displaced=t.batterIds.find(id=>id!==b.id&&pool[id]&&pool[id].order===ord);if(displaced)pool[displaced]={...pool[displaced],order:oldOrd};}pool[b.id]={...pool[b.id],order:ord,farm:false};}return{...s,pool};});}}><option value={1}>1</option><option value={2}>2</option><option value={3}>3</option><option value={4}>4</option><option value={5}>5</option><option value={6}>6</option><option value={7}>7</option><option value={8}>8</option><option value={9}>9</option><option value={0}>控え</option><option value="farm">2軍</option></select></td>
               <td style={S.stickyCol2}><input style={S.nameIn} value={b.name} onChange={e=>updatePlayer(b.id,"name",e.target.value)} /></td>
               <td><select style={S.numIn} value={b.bats||"R"} onChange={e=>updatePlayer(b.id,"bats",e.target.value)}><option value="R">右</option><option value="L">左</option><option value="S">両</option></select></td>
               <td>{(b.order>=1&&b.order<=9)
@@ -983,7 +988,6 @@ export default function App(){
               }</td>
               <td><AbilityInput id={b.id} field="defense" value={b.defense||50} /></td>
               <td><input type="checkbox" checked={!!b.foreign} onChange={e=>setState(s=>{const pool={...s.pool};pool[b.id]={...pool[b.id],foreign:e.target.checked};return{...s,pool};})} /></td>
-              <td><input type="checkbox" checked={!!b.farm} onChange={e=>setState(s=>{const pool={...s.pool};pool[b.id]={...pool[b.id],farm:e.target.checked};return{...s,pool};})} /></td>
               <td><input style={S.ageIn} type="number" value={b.age} onFocus={e=>e.target.select()} onChange={e=>{const v=parseInt(e.target.value,10);if(v>0&&v<100)updatePlayer(b.id,"age",v);}} /></td>
               <td><AbilityInput id={b.id} field="contact" value={b.contact} /></td><td><AbilityInput id={b.id} field="power" value={b.power} /></td><td><AbilityInput id={b.id} field="eye" value={b.eye} /></td><td><AbilityInput id={b.id} field="speed" value={b.speed} /></td>
               <td><select style={S.overallIn} value="" onChange={e=>e.target.value&&applyOverall(b.id,e.target.value)}><option value="">一括</option>{RANKS.map(r=><option key={r} value={r}>{r}</option>)}</select></td>
