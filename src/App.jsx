@@ -114,9 +114,6 @@ const GIVEN_W=[
   ["道",1],["則",1],["邦",1],["郁",1],["寛",1],["格",1],["亨",1],["侑",1],["勇",1],["朗",1],
   ["寿",1],["諒",1],["廉",1],["嶺",1],["汰",1],["斗",1],["叶",1],["奏",1],["蒼汰",1],["陽汰",1],
 ];
-// NPB年齢分布（18〜36歳）
-const AGE_W=[[18,3],[19,5],[20,7],[21,9],[22,10],[23,10],[24,9],[25,8],[26,7],[27,6],[28,5],[29,4],[30,4],[31,3],[32,2],[33,2],[34,1],[35,1],[36,1]];
-const _pickAge=_mkPicker(AGE_W);
 const POSITIONS = ["C","1B","2B","3B","SS","LF","CF","RF","DH"];
 const POS_WEIGHT = {
   C:    { bat:0.5, def:1.5 },
@@ -150,6 +147,9 @@ const _mkPicker=arr=>{let t=0;const c=arr.map(([n,w])=>(t+=w,[t,n]));return()=>{
 const _pickSurname=_mkPicker(SURNAMES_W);
 const _pickGiven=_mkPicker(GIVEN_W);
 const randName=()=>_pickSurname()+_pickGiven();
+// NPB年齢分布（18〜36歳）
+const AGE_W=[[18,3],[19,5],[20,7],[21,9],[22,10],[23,10],[24,9],[25,8],[26,7],[27,6],[28,5],[29,4],[30,4],[31,3],[32,2],[33,2],[34,1],[35,1],[36,1]];
+const _pickAge=_mkPicker(AGE_W);
 
 const RANKS=["S","A","B","C","D","E","F","G"];
 const RANK_VAL={S:92,A:83,B:73,C:63,D:53,E:43,F:33,G:20};
