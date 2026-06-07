@@ -356,16 +356,29 @@ function teamGame(off,def,pool,batStat,pitStat,gameNo){
   if(usedSP&&pitStat[usedSP.id]){const ps=pitStat[usedSP.id];const f=ps.injuryFactor;const spIP=clamp(6.0*f*(0.80+norm(usedSP.stamina)*0.30),3.5,8);
     ps.IP+=spIP;ps.G++;ps.ER+=runs*(spIP/9);ps.SO+=Math.round(spIP*(0.50+norm(effStuff(usedSP))*0.45)*clamp(spForm,0.8,1.5));ps.BB+=Math.max(0,Math.round(spIP*(0.34-norm(usedSP.control)*0.20)));ps.H+=Math.round(runs*0.75+spIP*0.70);if(rnd()<0.18)ps.HR++;
     const remain=9-spIP;
-    // 抑え優先で最後を締める
-    const closer=rp.find(p=>p.rotation>=ROTATION_CLOSER_MIN&&p.rotation<=ROTATION_CLOSER_MAX);const mid=rp.filter(p=>!(p.rotation>=ROTATION_CLOSER_MIN&&p.rotation<=ROTATION_CLOSER_MAX));
-    // その日投げる中継ぎは2〜3人だけ（ランダム選出）。残り全員は登板しない＝年間登板が現実的に
-    const shuffledMid=[...mid].sort(()=>rnd()-0.5);
-    const todayMid=shuffledMid.slice(0, 1+Math.floor(rnd()*2)); // 1〜2人
-    const relievers=[...todayMid];
-    // 僅差(3点差以内)のセーブ機会なら抑えが登板（実際に登板した場合のみ closer として返す）
-    let closerPitched=null;
-    if(closer && Math.abs(runs-4)<=3 && rnd()<0.60){relievers.push(closer);closerPitched=closer;}
-    if(!relievers.length && mid.length) relievers.push(shuffledMid[0]);
+    const closer=rp.find(p=>p.rotation>=ROTATION_CLOSER_MIN&&p.rotation<=ROTATION_CLOSER_MAX);
+    const mid=rp.filter(p=>!(p.rotation>=ROTATION_CLOSER_MIN&&p.rotation<=ROTATION_CLOSER_MAX));
+    // runs = 相手打線がうちの投手陣から奪った点数
+    // ≤3: 接戦（同点〜3点差リード想定） → セットアッパー(中1〜2)＋抑え
+    // ≥4: 4点差以上のリードまたはビハインド → ロング/ビハインド(中3〜5)、セットアッパー温存
+    const setup=mid.filter(p=>p.rotation<=ROTATION_RP_MIN+1).sort((a,b)=>a.rotation-b.rotation); // 中1〜2
+    const longR=mid.filter(p=>p.rotation>ROTATION_RP_MIN+1).sort((a,b)=>a.rotation-b.rotation);  // 中3〜5
+    const relievers=[];let closerPitched=null;
+    if(runs<=3){
+      // 接戦: セットアッパー中心
+      const src=setup.length?setup:mid;
+      relievers.push(src[0]);                                          // 中1は必ず登板
+      if(src.length>1&&rnd()<0.60)relievers.push(src[1]);             // 中2は60%
+      // セーブ条件（接戦の最終回）で抑え登板
+      if(closer&&rnd()<0.72){relievers.push(closer);closerPitched=closer;}
+    }else{
+      // 4点差以上/ビハインド: ロングリリーフ・ビハインド登板、セットアッパーは温存
+      const src=longR.length?longR:mid;
+      const sh=[...src].sort(()=>rnd()-0.5);
+      relievers.push(...sh.slice(0,1+(rnd()<0.45?1:0)));              // 1〜2人
+      // 抑えはセーブ条件でないため原則登板しない
+    }
+    if(!relievers.length&&mid.length)relievers.push(mid[Math.floor(rnd()*mid.length)]);
     relievers.forEach(p=>{if(!pitStat[p.id])return;const seg=remain/Math.max(1,relievers.length);const rs=pitStat[p.id];rs.IP+=seg;rs.G++;rs.ER+=(runs/9)*seg;rs.SO+=Math.round(seg*(0.60+norm(effStuff(p))*0.50));rs.BB+=Math.max(0,Math.round(seg*(0.33-norm(p.control)*0.16)));rs.H+=Math.round(seg*0.92);});}
   return {runs, sp:usedSP, closer:closerPitched};
 }
