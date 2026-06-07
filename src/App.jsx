@@ -659,14 +659,14 @@ function processOffseason(state,season,draftPicks){const {teams,pool,career,hall
       const perf=p.kind==="bat"?perfBat(id):perfPit(id);
       const good=p.kind==="bat"?perf>=105:perf>=110;
       const great=p.kind==="bat"?perf>=120:perf>=140;
-      if(!good && rnd()<0.70){ // 不振：解雇
+      if(!good && rnd()<0.45){ // 不振：解雇（NPB水準。半数以下が退団）
         p.status="released_foreign"; removeFromTeam(teams,p); news.release.push(`${tm.name} ${p.name}（助っ人）退団`);
-      } else if(great){ // 大活躍：MLB復帰/好条件流出（在籍が長いほど抜けやすい）
-        const leave=0.25+Math.min(0.25,p.yearsOnTeam*0.08);
+      } else if(great){ // 大活躍：MLB復帰/好条件流出（在籍2年超で少し確率が上がる程度）
+        const leave=0.10+Math.min(0.10,p.yearsOnTeam*0.03);
         if(rnd()<leave){ p.status="released_foreign"; removeFromTeam(teams,p); news.overseas.push(`${p.name}（助っ人）大活躍でMLB/好条件移籍`); }
-      } else if(good){ // 並の活躍：在籍年数が増えるほど流出（控えめ）
-        const leave=0.08+Math.min(0.18,p.yearsOnTeam*0.04);
-        if(rnd()<leave){ p.status="released_foreign"; removeFromTeam(teams,p); news.overseas.push(`${p.name}（助っ人）好条件で他球団・MLBへ`); }
+      } else if(good){ // 並の活躍：契約満了ベースで流出（低確率）
+        const leave=0.04+Math.min(0.08,p.yearsOnTeam*0.02);
+        if(rnd()<leave){ p.status="released_foreign"; removeFromTeam(teams,p); news.overseas.push(`${p.name}（助っ人）契約満了で退団`); }
       }
     });
   });
@@ -687,7 +687,7 @@ function processOffseason(state,season,draftPicks){const {teams,pool,career,hall
   oc.forEach(p=>{if(news.overseas.length<2&&rnd()<0.15){p.status="overseas";p.overseasReturn=2+Math.floor(rnd()*3);removeFromTeam(teams,p);news.overseas.push(`${p.name} 海外挑戦（${p.overseasReturn}年予定）`);}});
   Object.values(pool).forEach(p=>{if(p.status!=="overseas")return;p.overseasReturn--;if(p.overseasReturn<=0){p.status="fa";news.return.push(`${p.name} 国内復帰`);}});
   teams.forEach(tm=>{const judge=(ids,kind)=>{ids.slice().forEach(id=>{const p=pool[id];if(!p||p.status!=="active")return;const perf=kind==="bat"?perfBat(id):perfPit(id);const played=kind==="bat"?(season.batStat[id]?.PA||0):(season.pitStat[id]?.IP||0);const lowPerf=kind==="bat"?perf<70:perf<55;const thinPlay=kind==="bat"?played<150:played<25;
-    if(p.age>=25&&lowPerf&&thinPlay&&rnd()<0.30){p.status="fa";removeFromTeam(teams,p);news.release.push(`${tm.name} ${p.name}（${p.age}歳）戦力外`);}else if(p.age>=30&&lowPerf&&rnd()<0.15){p.status="fa";removeFromTeam(teams,p);news.release.push(`${tm.name} ${p.name}（${p.age}歳）戦力外`);}});};
+    if(p.age>=25&&lowPerf&&thinPlay&&rnd()<0.20){p.status="fa";removeFromTeam(teams,p);news.release.push(`${tm.name} ${p.name}（${p.age}歳）戦力外`);}else if(p.age>=30&&lowPerf&&rnd()<0.10){p.status="fa";removeFromTeam(teams,p);news.release.push(`${tm.name} ${p.name}（${p.age}歳）戦力外`);}});};
     judge(tm.batterIds,"bat");judge(tm.pitcherIds,"pit");});
   // FA宣言：有資格者(8年在籍)のうち、好成績の選手が中心に低確率で宣言。年4人前後に制限（NPB水準）
   const faEligible=Object.values(pool).filter(p=>p.status==="active"&&p.yearsOnTeam>=FA_YEARS);
@@ -946,6 +946,7 @@ export default function App(){
   const [qualBat,setQualBat]=useState(true);
   const [qualPit,setQualPit]=useState(true);
   const [statTeam,setStatTeam]=useState("");
+  const [statLeague,setStatLeague]=useState("");
 
   useEffect(()=>{saveState(state,year);},[state,year]);
   const cloneState=(s)=>JSON.parse(JSON.stringify(s));
@@ -1070,8 +1071,9 @@ export default function App(){
     setSyncing(false);
   };
 
-  const battingStats=useMemo(()=>result?computeBatting(Object.values(result.batStat)):[],[result]);
-  const pitchingStats=useMemo(()=>result?computePitching(Object.values(result.pitStat)):[],[result]);
+  const teamLeagueMap=useMemo(()=>{if(!result)return{};const m={};Object.values(result.record).forEach(r=>m[r.id]=r.league);return m;},[result]);
+  const battingStats=useMemo(()=>{if(!result)return[];return computeBatting(Object.values(result.batStat)).map(s=>({...s,league:teamLeagueMap[s.teamId]||""}));},[result,teamLeagueMap]);
+  const pitchingStats=useMemo(()=>{if(!result)return[];return computePitching(Object.values(result.pitStat)).map(s=>({...s,league:teamLeagueMap[s.teamId]||""}));},[result,teamLeagueMap]);
   const careerBatRows=useMemo(()=>{const rows=Object.values(state.career.bat).map(c=>{const p=state.pool[c.id];const init=p?.init||emptyCareerBat();const m={...c};Object.keys(emptyCareerBat()).forEach(k=>{if(k!=="seasons")m[k]=(c[k]||0)+(init[k]||0);});m.seasons=c.seasons+(init.seasons||0);return m;});return computeBatting(rows);},[state]);
   const careerPitRows=useMemo(()=>{const rows=Object.values(state.career.pit).map(c=>{const p=state.pool[c.id];const init=p?.init||emptyCareerPit();const m={...c};Object.keys(emptyCareerPit()).forEach(k=>{if(k!=="seasons")m[k]=(c[k]||0)+(init[k]||0);});m.seasons=c.seasons+(init.seasons||0);return m;});return computePitching(rows);},[state]);
   const standings=useMemo(()=>{
@@ -1084,9 +1086,14 @@ export default function App(){
   const hallPit=useMemo(()=>computePitching(state.hall.filter(h=>h.kind==="pit"&&h.career).map(h=>({...h.career,name:h.name,retireAge:h.age,role:h.role}))),[state]);
   const titles=useMemo(()=>{
     if(!result)return null;
-    const topB=(key,dir=1,minPA=0)=>battingStats.filter(s=>s.PA>=minPA).reduce((b,s)=>!b||(dir===1?s[key]>b[key]:s[key]<b[key])?s:b,null);
-    const topP=(key,dir=1,minIP=0,role=null)=>pitchingStats.filter(s=>s.IP>=minIP&&(!role||s.role===role)).reduce((b,s)=>!b||(dir===1?s[key]>b[key]:s[key]<b[key])?s:b,null);
-    return{batAvg:topB('AVG',1,100),hr:topB('HR'),rbi:topB('RBI'),sb:topB('SB'),wins:topP('W',1,0,'SP'),era:topP('ERA',-1,100),sv:topP('SV',1,0,'RP')};
+    const mkTitles=(lg)=>{
+      const bs=lg?battingStats.filter(s=>s.league===lg):battingStats;
+      const ps=lg?pitchingStats.filter(s=>s.league===lg):pitchingStats;
+      const topB=(key,dir=1,minPA=0)=>bs.filter(s=>s.PA>=minPA).reduce((b,s)=>!b||(dir===1?s[key]>b[key]:s[key]<b[key])?s:b,null);
+      const topP=(key,dir=1,minIP=0,role=null)=>ps.filter(s=>s.IP>=minIP&&(!role||s.role===role)).reduce((b,s)=>!b||(dir===1?s[key]>b[key]:s[key]<b[key])?s:b,null);
+      return{batAvg:topB('AVG',1,100),hr:topB('HR'),rbi:topB('RBI'),sb:topB('SB'),wins:topP('W',1,0,'SP'),era:topP('ERA',-1,100),sv:topP('SV',1,0,'RP')};
+    };
+    return{central:mkTitles("central"),pacific:mkTitles("pacific")};
   },[result,battingStats,pitchingStats]);
 
   const AbilityInput=({id,field,value})=>useRank?<select style={S.rankIn} value={valToRank(value)} onChange={e=>updateAbility(id,field,e.target.value)}>{RANKS.map(r=><option key={r} value={r}>{r}</option>)}</select>:<input style={S.numIn} type="number" value={value} onChange={e=>updateAbility(id,field,e.target.value)} />;
@@ -1355,24 +1362,30 @@ export default function App(){
               </tbody></table>
             </div>
           ))}
-          {/* タイトルホルダー */}
+          {/* タイトルホルダー（リーグ別） */}
           {titles&&<div style={{marginTop:8,marginBottom:16}}>
             <div style={{fontSize:12,color:accent,letterSpacing:1,marginBottom:8,fontWeight:600}}>◆ 今季タイトル</div>
-            <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
-              {[["首位打者",titles.batAvg?.name,titles.batAvg?f3(titles.batAvg.AVG):""],["本塁打王",titles.hr?.name,`${titles.hr?.HR||0}本`],["打点王",titles.rbi?.name,`${titles.rbi?.RBI||0}打点`],["盗塁王",titles.sb?.name,`${titles.sb?.SB||0}盗塁`],["最多勝",titles.wins?.name,`${titles.wins?.W||0}勝`],["最優秀防御率",titles.era?.name,titles.era?f2(titles.era.ERA):""],["最多セーブ",titles.sv?.name,`${titles.sv?.SV||0}S`]].map(([label,name,val])=>name&&(
-                <div key={label} style={{background:"#1a2a18",border:"1px solid #2a4a2a",borderRadius:4,padding:"6px 12px",minWidth:130}}>
-                  <div style={{fontSize:10,color:"#5a8a5a",marginBottom:2}}>{label}</div>
-                  <div style={{fontSize:13,color:"#d8e0d8",fontWeight:600}}>{name}</div>
-                  <div style={{fontSize:11,color:accent}}>{val}</div>
+            {[["central",state.config?.leagueNameC||LEAGUE_NAMES.central,"#1a2a18","#2a4a2a"],["pacific",state.config?.leagueNameP||LEAGUE_NAMES.pacific,"#18202a","#2a3a4a"]].map(([lg,label,bg,border])=>(
+              <div key={lg} style={{marginBottom:10}}>
+                <div style={{fontSize:11,color:"#7a8a7a",marginBottom:4,letterSpacing:1}}>{label}</div>
+                <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                  {[["首位打者",titles[lg]?.batAvg?.name,titles[lg]?.batAvg?f3(titles[lg].batAvg.AVG):""],["本塁打王",titles[lg]?.hr?.name,`${titles[lg]?.hr?.HR||0}本`],["打点王",titles[lg]?.rbi?.name,`${titles[lg]?.rbi?.RBI||0}打点`],["盗塁王",titles[lg]?.sb?.name,`${titles[lg]?.sb?.SB||0}盗塁`],["最多勝",titles[lg]?.wins?.name,`${titles[lg]?.wins?.W||0}勝`],["最優秀防御率",titles[lg]?.era?.name,titles[lg]?.era?f2(titles[lg].era.ERA):""],["最多セーブ",titles[lg]?.sv?.name,`${titles[lg]?.sv?.SV||0}S`]].map(([label2,name,val])=>name&&(
+                    <div key={label2} style={{background:bg,border:`1px solid ${border}`,borderRadius:4,padding:"5px 10px",minWidth:120}}>
+                      <div style={{fontSize:10,color:"#5a7a7a",marginBottom:2}}>{label2}</div>
+                      <div style={{fontSize:12,color:"#d8e0d8",fontWeight:600}}>{name}</div>
+                      <div style={{fontSize:11,color:accent}}>{val}</div>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              </div>
+            ))}
           </div>}
         </div>)}
         {(statTab==="batting"||statTab==="careerBat"||statTab==="hallBat") && (()=>{
           const isCur=statTab==="batting";const isHall=statTab==="hallBat";
-          const teamNames=isCur?[...new Set(battingStats.map(s=>s.team))].sort():[];
-          const base=(isCur?battingStats:isHall?hallBat:careerBatRows).filter(s=>(!isCur||!statTeam||s.team===statTeam)&&(!qualBat||!isCur||s.PA>=QUAL_PA));
+          const lnC=state.config?.leagueNameC||LEAGUE_NAMES.central;const lnP=state.config?.leagueNameP||LEAGUE_NAMES.pacific;
+          const teamNames=isCur?[...new Set(battingStats.filter(s=>!statLeague||s.league===statLeague).map(s=>s.team))].sort():[];
+          const base=(isCur?battingStats:isHall?hallBat:careerBatRows).filter(s=>(!isCur||!statLeague||s.league===statLeague)&&(!isCur||!statTeam||s.team===statTeam)&&(!qualBat||!isCur||s.PA>=QUAL_PA));
           const rows=base.slice().sort((a,b)=>batSort.dir*(typeof a[batSort.key]==="number"?b[batSort.key]-a[batSort.key]:0));
           const cols=[["選手","name"],isCur?["チーム","team"]:isHall?["引退","retireAge"]:["年数","seasons"],["G","games"],["PA","PA"],["AB","AB"],["H","H"],["2B","_2B"],["3B","_3B"],["HR","HR"],["RBI","RBI"],["SB","SB"],["BB","BB"],["SO","SO"],["AVG","AVG"],["OBP","OBP"],["SLG","SLG"],["OPS","OPS"],["ISO","ISO"],["wOBA","wOBA"],["wRC+","wRCp"]];
           const thStyle=(key)=>({cursor:"pointer",userSelect:"none",color:batSort.key===key?accent:undefined,whiteSpace:"nowrap"});
@@ -1380,6 +1393,9 @@ export default function App(){
           const arrow=(key)=>batSort.key===key?(batSort.dir===-1?"▼":"▲"):"";
           return(<div>
             {isCur&&<div style={{display:"flex",gap:12,alignItems:"center",marginBottom:8,flexWrap:"wrap"}}>
+              <div style={{display:"flex",gap:4}}>
+                {[["","両リーグ"],["central",lnC],["pacific",lnP]].map(([v,l])=><button key={v} style={statLeague===v?S.statTabA:S.statTab} onClick={()=>{setStatLeague(v);setStatTeam("");}}>{l}</button>)}
+              </div>
               <label style={S.toggle}><input type="checkbox" checked={qualBat} onChange={e=>setQualBat(e.target.checked)} /> 規定打席のみ（{QUAL_PA}PA以上）</label>
               <select style={{...S.numIn,width:"auto"}} value={statTeam} onChange={e=>setStatTeam(e.target.value)}>
                 <option value="">全チーム</option>
@@ -1403,15 +1419,19 @@ export default function App(){
         })()}
         {(statTab==="pitching"||statTab==="careerPit"||statTab==="hallPit") && (()=>{
           const isCur=statTab==="pitching";const isHall=statTab==="hallPit";
-          const pitTeamNames=isCur?[...new Set(pitchingStats.map(s=>s.team))].sort():[];
+          const lnC=state.config?.leagueNameC||LEAGUE_NAMES.central;const lnP=state.config?.leagueNameP||LEAGUE_NAMES.pacific;
+          const pitTeamNames=isCur?[...new Set(pitchingStats.filter(s=>!statLeague||s.league===statLeague).map(s=>s.team))].sort():[];
           const eraAsc=["ERA","FIP","WHIP","BB9"];
-          const base=(isCur?pitchingStats:isHall?hallPit:careerPitRows).filter(s=>(!isCur||!statTeam||s.team===statTeam)&&(!qualPit||!isCur||s.IP>=QUAL_IP));
+          const base=(isCur?pitchingStats:isHall?hallPit:careerPitRows).filter(s=>(!isCur||!statLeague||s.league===statLeague)&&(!isCur||!statTeam||s.team===statTeam)&&(!qualPit||!isCur||s.IP>=QUAL_IP));
           const rows=base.slice().sort((a,b)=>pitSort.dir*(typeof a[pitSort.key]==="number"?b[pitSort.key]-a[pitSort.key]:0));
           const cols=[["選手","name"],isCur?["チーム","team"]:isHall?["引退","retireAge"]:["年数","seasons"],["役割","role"],["G","G"],["W","W"],["L","L"],["SV","SV"],["IP","IP"],["SO","SO"],["BB","BB"],["ERA","ERA"],["FIP","FIP"],["WHIP","WHIP"],["K/9","K9"],["BB/9","BB9"]];
           const thStyle=(key)=>({cursor:"pointer",userSelect:"none",color:pitSort.key===key?accent:undefined,whiteSpace:"nowrap"});
           const arrow=(key)=>pitSort.key===key?(pitSort.dir===-1?"▼":"▲"):"";
           return(<div>
             {isCur&&<div style={{display:"flex",gap:12,alignItems:"center",marginBottom:8,flexWrap:"wrap"}}>
+              <div style={{display:"flex",gap:4}}>
+                {[["","両リーグ"],["central",lnC],["pacific",lnP]].map(([v,l])=><button key={v} style={statLeague===v?S.statTabA:S.statTab} onClick={()=>{setStatLeague(v);setStatTeam("");}}>{l}</button>)}
+              </div>
               <label style={S.toggle}><input type="checkbox" checked={qualPit} onChange={e=>setQualPit(e.target.checked)} /> 規定投球回のみ（{QUAL_IP}IP以上）</label>
               <select style={{...S.numIn,width:"auto"}} value={statTeam} onChange={e=>setStatTeam(e.target.value)}>
                 <option value="">全チーム</option>
@@ -1436,8 +1456,14 @@ export default function App(){
         })()}
         {statTab==="team" && (()=>{
           if(!result)return<div style={S.note}>シーズンを実行してください。</div>;
-          const teamList=[...new Set(battingStats.map(s=>s.team))].sort();
-          return(<div>{teamList.map(tn=>{
+          const lnC=state.config?.leagueNameC||LEAGUE_NAMES.central;const lnP=state.config?.leagueNameP||LEAGUE_NAMES.pacific;
+          const allTeamsWithLeague=[...new Set(battingStats.map(s=>s.team))].map(tn=>({tn,league:battingStats.find(s=>s.team===tn)?.league||""}));
+          const teamList=statLeague?allTeamsWithLeague.filter(x=>x.league===statLeague).map(x=>x.tn):allTeamsWithLeague.map(x=>x.tn);
+          return(<div>
+            <div style={{display:"flex",gap:4,marginBottom:12}}>
+              {[["","両リーグ"],["central",lnC],["pacific",lnP]].map(([v,l])=><button key={v} style={statLeague===v?S.statTabA:S.statTab} onClick={()=>setStatLeague(v)}>{l}</button>)}
+            </div>
+            {teamList.map(tn=>{
             const bRows=battingStats.filter(s=>s.team===tn);
             const pRows=pitchingStats.filter(s=>s.team===tn);
             const totB=bRows.reduce((acc,s)=>({PA:acc.PA+s.PA,AB:acc.AB+s.AB,H:acc.H+s.H,_2B:acc._2B+s._2B,_3B:acc._3B+s._3B,HR:acc.HR+s.HR,RBI:acc.RBI+s.RBI,SB:acc.SB+s.SB,BB:acc.BB+s.BB,HBP:acc.HBP+(s.HBP||0),SO:acc.SO+s.SO}),{PA:0,AB:0,H:0,_2B:0,_3B:0,HR:0,RBI:0,SB:0,BB:0,HBP:0,SO:0});
