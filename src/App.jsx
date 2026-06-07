@@ -408,22 +408,65 @@ function playJapanSeries(champC,champP,teams,pool){
   return {champion:champ.name,wC,wP,log};
 }
 
-// シーズン中の1軍2軍入れ替え：不振の1軍と好調な2軍を入れ替える（NPBの昇降格を再現）
+// シーズン中の1軍2軍入れ替え（NPB水準：週1〜2回相当）
+// ・スタメンも不振なら降格候補に含める
+// ・能力が高いほど降格閾値が厳しくなる（簡単には落とされない）
+// ・2軍から戻る際は order/rotation を保持したまま farm だけ解除
 function midSeasonSwap(teams,pool,batStat,pitStat){
   teams.forEach(tm=>{
-    const oneBench=tm.batterIds.map(id=>pool[id]).filter(b=>!b.farm&&!(b.order>=1&&b.order<=9));
-    const farmBat=tm.batterIds.map(id=>pool[id]).filter(b=>b.farm);
-    if(oneBench.length&&farmBat.length){
-      const worst=oneBench.map(b=>({b,avg:batStat[b.id]?batStat[b.id].H/Math.max(1,batStat[b.id].AB):0,pa:batStat[b.id]?.PA||0})).filter(x=>x.pa>20).sort((a,b)=>a.avg-b.avg)[0];
-      const best=farmBat.map(b=>({b,score:(b.contact+b.power+b.eye+b.speed)/4})).sort((a,b)=>b.score-a.score)[0];
-      if(worst&&best&&rnd()<0.5){ worst.b.farm=true; best.b.farm=false; }
+    // ── 野手 ───────────────────────────────────────────────
+    const batAbil=b=>(b.contact+b.power+b.eye+b.speed)/4;
+    // 打率降格閾値：能力S/A→.170 B/C→.200 D/E→.225 F/G→.250
+    const batThresh=b=>{const a=batAbil(b);return a>=80?.170:a>=65?.200:a>=50?.225:.250;};
+    // 降格スコア（正のほど降格リスク高）＝(閾値-打率) × PA充足率
+    const batDScore=b=>{
+      const st=batStat[b.id];if(!st||st.PA<25)return -1;
+      const avg=st.H/Math.max(1,st.AB);
+      const paW=Math.min(1,(st.PA-25)/60); // PA85で満点
+      return paW*(batThresh(b)-avg);
+    };
+    const bat1=tm.batterIds.map(id=>pool[id]).filter(p=>p&&!p.farm&&p.status==="active");
+    const batF=tm.batterIds.map(id=>pool[id]).filter(p=>p&&p.farm&&p.status==="active");
+    // スタメン含む1軍全員を降格候補に（不振なら誰でも対象）
+    const batDown=bat1.filter(b=>batDScore(b)>0).sort((a,b)=>batDScore(b)-batDScore(a));
+    // 2軍は能力順に昇格候補（一度落ちた選手も戻れる）
+    const batUp=batF.slice().sort((a,b)=>batAbil(b)-batAbil(a));
+    const batN=Math.min(batDown.length,batUp.length,2);
+    for(let i=0;i<batN;i++){
+      const down=batDown[i],up=batUp[i];if(!down||!up)break;
+      // 降格選手より2軍選手の能力が低いなら確率低下
+      const gap=batAbil(down)-batAbil(up); // 正=降格者が能力上
+      const prob=gap>25?0.20:gap>10?0.50:0.80;
+      if(rnd()<prob){
+        down.farm=true;  // order は保持：戻ってきたとき元の打順に戻る
+        up.farm=false;
+      }
     }
-    const onePit=tm.pitcherIds.map(id=>pool[id]).filter(p=>!p.farm);
-    const farmPit=tm.pitcherIds.map(id=>pool[id]).filter(p=>p.farm);
-    if(onePit.length&&farmPit.length){
-      const worst=onePit.map(p=>({p,era:pitStat[p.id]&&pitStat[p.id].IP>10?pitStat[p.id].ER*9/pitStat[p.id].IP:0,ip:pitStat[p.id]?.IP||0})).filter(x=>x.ip>15).sort((a,b)=>b.era-a.era)[0];
-      const best=farmPit.map(p=>({p,score:(p.stuff+p.control+p.stamina)/3})).sort((a,b)=>b.score-a.score)[0];
-      if(worst&&best&&worst.era>5.0&&rnd()<0.4){ worst.p.farm=true; best.p.farm=false; worst.p.rotation=ROTATION_RP_MIN; }
+
+    // ── 投手 ───────────────────────────────────────────────
+    const pitAbil=p=>(p.stuff+p.control+p.stamina)/3;
+    // ERA 閾値：能力S/A→5.50 B/C→4.80 D/E→4.20 F/G→3.80
+    const pitThresh=p=>{const a=pitAbil(p);return a>=80?5.50:a>=65?4.80:a>=50?4.20:3.80;};
+    const pitMinIP=p=>p.role==="SP"?25:12;
+    const pitDScore=p=>{
+      const st=pitStat[p.id];if(!st||st.IP<pitMinIP(p))return -1;
+      return (st.ER*9/Math.max(1,st.IP))-pitThresh(p);
+    };
+    const pit1=tm.pitcherIds.map(id=>pool[id]).filter(p=>p&&!p.farm&&p.status==="active");
+    const pitF=tm.pitcherIds.map(id=>pool[id]).filter(p=>p&&p.farm&&p.status==="active");
+    const pitDown=pit1.filter(p=>pitDScore(p)>0).sort((a,b)=>pitDScore(b)-pitDScore(a));
+    const pitUp=pitF.slice().sort((a,b)=>pitAbil(b)-pitAbil(a));
+    const pitN=Math.min(pitDown.length,pitUp.length,2);
+    for(let i=0;i<pitN;i++){
+      const down=pitDown[i],up=pitUp[i];if(!down||!up)break;
+      const gap=pitAbil(down)-pitAbil(up);
+      const prob=gap>25?0.20:gap>10?0.50:0.80;
+      if(rnd()<prob){
+        down.farm=true;
+        if(down.rotation>=1&&down.rotation<=ROTATION_SIZE) down.rotation=0; // 先発はローテ消去
+        up.farm=false;
+        if(up.rotation===0) up.rotation=ROTATION_RP_MIN; // 救援昇格はローテ先頭に
+      }
     }
   });
 
@@ -490,9 +533,10 @@ function simulateSeason(teams,pool){const batStat={},pitStat={};
     tm.pitcherIds.forEach(id=>{const p=pool[id];let inj=1;const r=rnd();if(r<0.12)inj=0.5;else if(r<0.2)inj=0.75;pitStat[id]={id,name:p.name,team:tm.name,teamId:tm.id,age:p.age,role:p.role,IP:0,H:0,HR:0,BB:0,SO:0,ER:0,W:0,L:0,SV:0,G:0,injuryFactor:inj,form:rollForm()};});});
   const record={};teams.forEach(tm=>record[tm.id]={name:tm.name,league:tm.league,W:0,L:0,RS:0,RA:0,id:tm.id});
   const schedule=buildSchedule(teams);
+  // 約6試合(1週間)ごとに入れ替え評価。lastSwapGame で重複呼び出しを防ぐ
+  let lastSwapGame=0;
   const gameLog=[];schedule.forEach(m=>{
-    // 約30試合ごとに1軍2軍入れ替え（シーズン中の昇降格）
-    if(m.gameNo>1 && m.gameNo%20===0 && m.home===teams[0].id) midSeasonSwap(teams,pool,batStat,pitStat);
+    if(m.gameNo>lastSwapGame+5){midSeasonSwap(teams,pool,batStat,pitStat);lastSwapGame=m.gameNo;}
     const home=teams.find(t=>t.id===m.home),away=teams.find(t=>t.id===m.away);
     const hRes=teamGame(home,away,pool,batStat,pitStat,m.gameNo),aRes=teamGame(away,home,pool,batStat,pitStat,m.gameNo);
     let hR=hRes.runs,aR=aRes.runs;if(hR===aR){if(rnd()<0.5)hR++;else aR++;}
