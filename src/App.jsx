@@ -23,8 +23,8 @@ const INTERLEAGUE_RATIO = 0.18; // 交流戦の割合
 const JS_WINS = 4; // 日本シリーズは先に4勝
 const GAMES=143, NUM_TEAMS=12, BATTERS_PER_TEAM=20, PITCHERS_PER_TEAM=16, FA_YEARS=8, RETIRE_AGE=36;
 // NPB準拠の枠
-const ROSTER_28=28;       // 一軍登録上限（NPB準拠 固定）
-const BENCH_25=25;        // ベンチ入り
+const ROSTER_31=31;       // 一軍登録上限（NPB準拠 固定）
+const BENCH_26=26;        // ベンチ入り上限（先発SP5人はオフ扱いで実質26人）
 const FOREIGN_ON_FIELD=5; // 外国人同時出場上限
 // ユーザーが変更できるリーグ設定のデフォルト値
 const DEFAULT_CONFIG={battersPerTeam:BATTERS_PER_TEAM,pitchersPerTeam:PITCHERS_PER_TEAM,draftBat:3,draftPit:2,leagueNameC:"セントラル",leagueNameP:"パシフィック"};
@@ -212,7 +212,7 @@ function initLeague(){
   assignFarm(teams,pool);
   return {teams,pool};
 }
-// 1軍登録上限(ROSTER_28)を超えた選手を2軍(farm)に回す。能力下位＆若手から2軍へ
+// 1軍登録上限(ROSTER_31)を超えた選手を2軍(farm)に回す。能力下位＆若手から2軍へ
 function assignFarm(teams,pool){
   teams.forEach(tm=>{
     const members=[...tm.batterIds,...tm.pitcherIds].map(id=>pool[id]).filter(Boolean);
@@ -222,7 +222,7 @@ function assignFarm(teams,pool){
       if(p.kind==="pit"&&p.role==="RP"&&p.rotation>=ROTATION_RP_MIN&&p.rotation<=ROTATION_RP_MAX)s+=8; // 中継ぎにも1軍枠ボーナス
       return s; };
     members.sort((a,b)=>score(b)-score(a));
-    members.forEach((p,i)=>{ p.farm = i>=ROSTER_28; });
+    members.forEach((p,i)=>{ p.farm = i>=ROSTER_31; });
   });
 }
 
@@ -1003,9 +1003,14 @@ export default function App(){
           const dupPos=usedPos.filter((p,i)=>usedPos.indexOf(p)!==i);
           const batCount=t.batterIds.map(id=>state.pool[id]).filter(Boolean).length;
           const pitCount=t.pitcherIds.map(id=>state.pool[id]).filter(Boolean).length;
+          const bat1=t.batterIds.map(id=>state.pool[id]).filter(p=>p&&!p.farm).length;
+          const pit1=t.pitcherIds.map(id=>state.pool[id]).filter(p=>p&&!p.farm&&p.rotation!==0).length;
+          const sp1=t.pitcherIds.map(id=>state.pool[id]).filter(p=>p&&!p.farm&&p.role==="SP"&&p.rotation>=1&&p.rotation<=ROTATION_SIZE).length;
+          const registered=bat1+pit1;
+          const bench=bat1+(pit1-Math.max(0,sp1-1));
           return{id:t.id,name:t.name,missingOrders,dupOrders,missingPos,dupPos,batCount,pitCount,
-            batOver:batCount>16,pitOver:pitCount>12,
-            ok:missingOrders.length===0&&dupOrders.length===0&&missingPos.length===0&&dupPos.length===0&&batCount<=16&&pitCount<=12};
+            batOver:batCount>16,pitOver:pitCount>12,regOver:registered>ROSTER_31,benchOver:bench>BENCH_26,
+            ok:missingOrders.length===0&&dupOrders.length===0&&missingPos.length===0&&dupPos.length===0&&batCount<=16&&pitCount<=12&&registered<=ROSTER_31&&bench<=BENCH_26};
         });
         return null;
       })()}
@@ -1056,7 +1061,7 @@ export default function App(){
             <span style={S.settLabel}>選手枠（野手/投手）：</span>
             <input style={S.settNumIn} type="number" min={9} max={50} value={state.config?.battersPerTeam||DEFAULT_CONFIG.battersPerTeam} onChange={e=>updateConfig("battersPerTeam",e.target.value)} />
             <input style={S.settNumIn} type="number" min={6} max={40} value={state.config?.pitchersPerTeam||DEFAULT_CONFIG.pitchersPerTeam} onChange={e=>updateConfig("pitchersPerTeam",e.target.value)} />
-            <span style={S.settHint}>1軍上限: {ROSTER_28}人（NPB準拠）</span>
+            <span style={S.settHint}>1軍登録上限: {ROSTER_31}人 / ベンチ入り: {BENCH_26}人（先発5人はオフ）（NPB準拠）</span>
           </div>
           <div style={S.settRow}>
             <span style={S.settLabel}>ドラフト指名数（野手/投手）：</span>
@@ -1075,11 +1080,15 @@ export default function App(){
             </select>
           </div>
           {(()=>{
-            const cfg=state.config||DEFAULT_CONFIG;
             const bat1=t.batterIds.map(id=>state.pool[id]).filter(p=>p&&!p.farm).length;
             const pit1=t.pitcherIds.map(id=>state.pool[id]).filter(p=>p&&!p.farm&&p.rotation!==0).length;
             const batTotal=t.batterIds.map(id=>state.pool[id]).filter(Boolean).length;
             const pitTotal=t.pitcherIds.map(id=>state.pool[id]).filter(Boolean).length;
+            const sp1=t.pitcherIds.map(id=>state.pool[id]).filter(p=>p&&!p.farm&&p.role==="SP"&&p.rotation>=1&&p.rotation<=ROTATION_SIZE).length;
+            const registered=bat1+pit1;
+            const bench=bat1+(pit1-Math.max(0,sp1-1)); // 先発はその日登板の1人のみベンチ入り
+            const regOver=registered>ROSTER_31;
+            const benchOver=bench>BENCH_26;
             const errs=window._teamErrs&&window._teamErrs.find(e=>e.id===t.id);
             const warnItems=[];
             if(errs){
@@ -1088,20 +1097,29 @@ export default function App(){
               if(errs.missingPos.length>0)warnItems.push("守位未設定: "+errs.missingPos.join(", "));
               if(errs.dupPos.length>0)warnItems.push("守位重複: "+[...new Set(errs.dupPos)].join(", "));
             }
+            if(regOver)warnItems.push(`1軍登録が${ROSTER_31}人を超えています（現在${registered}人）`);
+            if(benchOver)warnItems.push(`ベンチ入りが${BENCH_26}人を超えています（現在${bench}人）`);
             return(<>
-              <div style={{display:"flex",gap:12,alignItems:"center",margin:"10px 0 4px",flexWrap:"wrap"}}>
+              <div style={{display:"flex",gap:10,alignItems:"center",margin:"10px 0 4px",flexWrap:"wrap"}}>
                 <span style={{fontSize:12,color:"#7a8a7a"}}>野手</span>
                 <span style={{fontSize:13,fontWeight:"bold",color:"#7ec87e"}}>{bat1}</span>
-                <span style={{fontSize:11,color:"#7a8a7a"}}>1軍</span>
+                <span style={{fontSize:11,color:"#7a8a7a"}}>登録</span>
                 <span style={{fontSize:12,color:"#7a8a7a"}}>/</span>
                 <span style={{fontSize:13,fontWeight:"bold",color:batTotal>16?"#ff6b6b":"#d8e0d8"}}>{batTotal}</span>
                 <span style={{fontSize:11,color:"#7a8a7a"}}>全{batTotal>16&&<span style={{color:"#ff6b6b",marginLeft:2}}>（上限16）</span>}</span>
-                <span style={{fontSize:12,color:"#7a8a7a",marginLeft:8}}>投手</span>
+                <span style={{fontSize:12,color:"#7a8a7a",marginLeft:6}}>投手</span>
                 <span style={{fontSize:13,fontWeight:"bold",color:"#7ec87e"}}>{pit1}</span>
-                <span style={{fontSize:11,color:"#7a8a7a"}}>1軍</span>
+                <span style={{fontSize:11,color:"#7a8a7a"}}>登録</span>
                 <span style={{fontSize:12,color:"#7a8a7a"}}>/</span>
                 <span style={{fontSize:13,fontWeight:"bold",color:pitTotal>12?"#ff6b6b":"#d8e0d8"}}>{pitTotal}</span>
                 <span style={{fontSize:11,color:"#7a8a7a"}}>全{pitTotal>12&&<span style={{color:"#ff6b6b",marginLeft:2}}>（上限12）</span>}</span>
+                <span style={{fontSize:11,color:"#7a8a7a",marginLeft:6,borderLeft:"1px solid #3a4a3a",paddingLeft:8}}>
+                  1軍登録 <span style={{fontWeight:"bold",color:regOver?"#ff6b6b":"#d8e0d8"}}>{registered}</span>/{ROSTER_31}人
+                </span>
+                <span style={{fontSize:11,color:"#7a8a7a"}}>
+                  ベンチ入り <span style={{fontWeight:"bold",color:benchOver?"#ff6b6b":"#d8e0d8"}}>{bench}</span>/{BENCH_26}人
+                  <span style={{color:"#5a7a5a",marginLeft:3}}>(先発{sp1}人中{Math.max(0,sp1-1)}人オフ)</span>
+                </span>
               </div>
               {warnItems.length>0&&<div style={{fontSize:12,color:"#ff6b6b",margin:"2px 0 6px",lineHeight:1.6}}>{warnItems.map((w,i)=><div key={i}>⚠ {w}</div>)}</div>}
             </>);
