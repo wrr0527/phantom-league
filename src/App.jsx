@@ -946,9 +946,9 @@ export default function App(){
       });
       pitchers.forEach((p,i)=>{
         let rot;
-        if(i<6)rot=i+1;           // 先1-6
-        else if(i<11)rot=11+(i-6); // 中1-5
-        else if(i===11)rot=21;     // 抑1
+        if(i<6)rot=i+1;            // 先1-6
+        else if(i<16)rot=11+(i-6); // 中1-10
+        else if(i===16)rot=21;     // 抑1
         else rot=0;                // 二軍
         pool[p.id]={...pool[p.id],rotation:rot,farm:rot===0};
       });
@@ -1058,19 +1058,19 @@ export default function App(){
             <input style={S.settIn} value={state.config?.leagueNameP||DEFAULT_CONFIG.leagueNameP} onChange={e=>updateConfig("leagueNameP",e.target.value)} placeholder="パシフィック" />
           </div>
           <div style={S.settRow}>
-            <span style={S.settLabel}>選手枠（野手/投手）：</span>
-            <input style={S.settNumIn} type="number" min={9} max={50} value={state.config?.battersPerTeam||DEFAULT_CONFIG.battersPerTeam} onChange={e=>updateConfig("battersPerTeam",e.target.value)} />
-            <input style={S.settNumIn} type="number" min={6} max={40} value={state.config?.pitchersPerTeam||DEFAULT_CONFIG.pitchersPerTeam} onChange={e=>updateConfig("pitchersPerTeam",e.target.value)} />
-            <span style={S.settHint}>1軍登録上限: {ROSTER_31}人 / ベンチ入り: {BENCH_26}人（先発5人はオフ）（NPB準拠）</span>
-          </div>
-          <div style={S.settRow}>
             <span style={S.settLabel}>ドラフト指名数（野手/投手）：</span>
             <input style={S.settNumIn} type="number" min={0} max={10} value={state.config?.draftBat||DEFAULT_CONFIG.draftBat} onChange={e=>updateConfig("draftBat",e.target.value)} />
             <input style={S.settNumIn} type="number" min={0} max={10} value={state.config?.draftPit||DEFAULT_CONFIG.draftPit} onChange={e=>updateConfig("draftPit",e.target.value)} />
-            <span style={S.settHint}>球団ごとの指名人数。選手枠を下回った分は自動補充</span>
+            <span style={S.settHint}>球団ごとの指名人数。不足した場合は自動補充</span>
+          </div>
+          <div style={{fontSize:12,color:"#5a7a5a",padding:"4px 0",display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+            <span>📋 ロースター制限（NPB準拠）：</span>
+            <span>1軍登録 <b style={{color:"#7ec87e"}}>{ROSTER_31}人</b>以内</span>
+            <span>ベンチ入り <b style={{color:"#7ec87e"}}>{BENCH_26}人</b>以内（先発5人はオフ日扱い）</span>
+            <span>野手スタメン 打順1〜9・守備位置9種 すべて必須</span>
           </div>
         </div>
-        <div style={S.note}><b style={{color:accent}}>打順</b>=1〜9がスタメン、0は控え(代打候補)。<b style={{color:accent}}>ローテ</b>=1〜6が先発、11〜20が中継ぎ、21〜30が抑え、0は二軍(自動でファーム扱い)。<b style={{color:green}}>外</b>=外国人(同時出場{FOREIGN_ON_FIELD}人まで)。セル横の「球種」で変化球を編集。チーム名の右でリーグを選べます。</div>
+        <div style={S.note}><b style={{color:accent}}>打順</b>=1〜9がスタメン(全ポジション必須)、0は控え(代打候補)、ファームは2軍。<b style={{color:accent}}>ローテ</b>=1〜6が先発、11〜20が中継ぎ、21〜30が抑え、0は二軍(自動でファーム扱い)。<b style={{color:green}}>外</b>=外国人(同時出場{FOREIGN_ON_FIELD}人まで)。球種はセル横の欄で編集。チーム名の右でリーグ変更可。全チームの編成が条件を満たすとシーズン実行が解放されます。</div>
         <div style={S.teamTabs}>{state.teams.map(t=><button key={t.id} onClick={()=>setEditTeam(t.id)} style={editTeam===t.id?S.teamTabA:S.teamTab}>{t.name}</button>)}</div>
         {state.teams.filter(t=>t.id===editTeam).map(t=>(<div key={t.id}>
           <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
@@ -1080,8 +1080,12 @@ export default function App(){
             </select>
           </div>
           {(()=>{
-            const bat1=t.batterIds.map(id=>state.pool[id]).filter(p=>p&&!p.farm).length;
-            const pit1=t.pitcherIds.map(id=>state.pool[id]).filter(p=>p&&!p.farm&&p.rotation!==0).length;
+            const batAll=t.batterIds.map(id=>state.pool[id]).filter(Boolean).length;
+            const pitAll=t.pitcherIds.map(id=>state.pool[id]).filter(Boolean).length;
+            const batFarm=t.batterIds.map(id=>state.pool[id]).filter(p=>p&&p.farm).length;
+            const pitFarm=t.pitcherIds.map(id=>state.pool[id]).filter(p=>p&&(p.farm||p.rotation===0)).length;
+            const bat1=batAll-batFarm;
+            const pit1=pitAll-pitFarm;
             const sp1=t.pitcherIds.map(id=>state.pool[id]).filter(p=>p&&!p.farm&&p.role==="SP"&&p.rotation>=1&&p.rotation<=ROTATION_SIZE).length;
             const registered=bat1+pit1;
             const bench=bat1+(pit1-Math.max(0,sp1-1));
@@ -1098,20 +1102,32 @@ export default function App(){
               if(benchOver)warnItems.push(`ベンチ入り${bench}人 → ${BENCH_26}人以内にしてください`);
             }
             return(<>
-              <div style={{display:"flex",gap:10,alignItems:"center",margin:"10px 0 4px",flexWrap:"wrap"}}>
-                <span style={{fontSize:12,color:"#7a8a7a"}}>野手</span>
-                <span style={{fontSize:13,fontWeight:"bold",color:"#7ec87e"}}>{bat1}</span>
-                <span style={{fontSize:11,color:"#7a8a7a"}}>1軍　</span>
-                <span style={{fontSize:12,color:"#7a8a7a"}}>投手</span>
-                <span style={{fontSize:13,fontWeight:"bold",color:"#7ec87e"}}>{pit1}</span>
-                <span style={{fontSize:11,color:"#7a8a7a"}}>1軍　</span>
-                <span style={{fontSize:11,color:"#7a8a7a",borderLeft:"1px solid #3a4a3a",paddingLeft:8}}>
-                  登録 <span style={{fontWeight:"bold",color:regOver?"#ff6b6b":"#d8e0d8"}}>{registered}</span>/{ROSTER_31}人
-                </span>
-                <span style={{fontSize:11,color:"#7a8a7a"}}>
-                  ベンチ <span style={{fontWeight:"bold",color:benchOver?"#ff6b6b":"#d8e0d8"}}>{bench}</span>/{BENCH_26}人
-                  <span style={{color:"#5a7a5a",marginLeft:3}}>(先発{sp1}人中{Math.max(0,sp1-1)}人オフ)</span>
-                </span>
+              <div style={{display:"flex",gap:0,alignItems:"stretch",margin:"10px 0 4px",flexWrap:"wrap",background:"#1a2a1a",borderRadius:6,overflow:"hidden",border:"1px solid #2a3a2a"}}>
+                <div style={{display:"flex",flexDirection:"column",alignItems:"center",padding:"6px 14px",borderRight:"1px solid #2a3a2a",minWidth:70}}>
+                  <span style={{fontSize:10,color:"#5a7a5a",marginBottom:2}}>野手</span>
+                  <span style={{fontSize:16,fontWeight:"bold",color:"#7ec87e",lineHeight:1}}>{batAll}</span>
+                  <span style={{fontSize:10,color:"#5a7a5a",marginTop:2}}>1軍{bat1} / 2軍{batFarm}</span>
+                </div>
+                <div style={{display:"flex",flexDirection:"column",alignItems:"center",padding:"6px 14px",borderRight:"1px solid #2a3a2a",minWidth:70}}>
+                  <span style={{fontSize:10,color:"#5a7a5a",marginBottom:2}}>投手</span>
+                  <span style={{fontSize:16,fontWeight:"bold",color:"#7ec87e",lineHeight:1}}>{pitAll}</span>
+                  <span style={{fontSize:10,color:"#5a7a5a",marginTop:2}}>1軍{pit1} / 2軍{pitFarm}</span>
+                </div>
+                <div style={{display:"flex",flexDirection:"column",alignItems:"center",padding:"6px 14px",borderRight:"1px solid #2a3a2a",minWidth:70}}>
+                  <span style={{fontSize:10,color:"#5a7a5a",marginBottom:2}}>合計</span>
+                  <span style={{fontSize:16,fontWeight:"bold",color:"#b8d8b8",lineHeight:1}}>{batAll+pitAll}</span>
+                  <span style={{fontSize:10,color:"#5a7a5a",marginTop:2}}>人</span>
+                </div>
+                <div style={{display:"flex",flexDirection:"column",alignItems:"center",padding:"6px 14px",borderRight:"1px solid #2a3a2a",minWidth:80}}>
+                  <span style={{fontSize:10,color:"#5a7a5a",marginBottom:2}}>1軍登録</span>
+                  <span style={{fontSize:16,fontWeight:"bold",color:regOver?"#ff6b6b":"#d8e0d8",lineHeight:1}}>{registered}<span style={{fontSize:11,fontWeight:"normal",color:"#5a7a5a"}}>/{ROSTER_31}</span></span>
+                  <span style={{fontSize:10,color:regOver?"#ff6b6b":"#5a7a5a",marginTop:2}}>{regOver?"超過！":"OK"}</span>
+                </div>
+                <div style={{display:"flex",flexDirection:"column",alignItems:"center",padding:"6px 14px",minWidth:100}}>
+                  <span style={{fontSize:10,color:"#5a7a5a",marginBottom:2}}>ベンチ入り</span>
+                  <span style={{fontSize:16,fontWeight:"bold",color:benchOver?"#ff6b6b":"#d8e0d8",lineHeight:1}}>{bench}<span style={{fontSize:11,fontWeight:"normal",color:"#5a7a5a"}}>/{BENCH_26}</span></span>
+                  <span style={{fontSize:10,color:"#5a7a5a",marginTop:2}}>先発{sp1}人中{Math.max(0,sp1-1)}人オフ</span>
+                </div>
               </div>
               {warnItems.length>0&&<div style={{fontSize:12,color:"#ff6b6b",margin:"2px 0 6px",lineHeight:1.6}}>{warnItems.map((w,i)=><div key={i}>⚠ {w}</div>)}</div>}
             </>);
@@ -1132,7 +1148,7 @@ export default function App(){
               <td><input style={S.ageIn} type="number" value={b.age} onFocus={e=>e.target.select()} onChange={e=>{const v=parseInt(e.target.value,10);if(v>0&&v<100)updatePlayer(b.id,"age",v);}} /></td>
               <td><AbilityInput id={b.id} field="contact" value={b.contact} /></td><td><AbilityInput id={b.id} field="power" value={b.power} /></td><td><AbilityInput id={b.id} field="eye" value={b.eye} /></td><td><AbilityInput id={b.id} field="speed" value={b.speed} /></td>
               <td><select style={S.overallIn} value="" onChange={e=>e.target.value&&applyOverall(b.id,e.target.value)}><option value="">一括</option>{RANKS.map(r=><option key={r} value={r}>{r}</option>)}</select></td>
-              {showInit&&[["HR"],["H"],["seasons"]].map(([f])=><td key={f}><input style={S.initIn} type="number" value={b.init?.[f]||0} onChange={e=>updateInit(b.id,f,e.target.value)} /></td>)}
+              {showInit&&[["HR"],["H"],["seasons"]].map(([f])=><td key={f}><input style={S.initIn} type="number" value={b.init?.[f]||0} onFocus={e=>e.target.select()} onChange={e=>updateInit(b.id,f,e.target.value)} /></td>)}
               <td><button style={S.delBtn} onClick={()=>removeBatter(t.id,b.id)} title="削除">×</button></td>
             </tr>))}
           </tbody></table></div>
@@ -1144,7 +1160,7 @@ export default function App(){
               <td style={S.stickyCol1}><select style={S.numIn} value={p.rotation||0} onChange={e=>{const rot=Number(e.target.value);setState(s=>{const pool={...s.pool};const oldRot=pool[p.id].rotation||0;if(rot!==0){const displaced=t.pitcherIds.find(id=>id!==p.id&&pool[id]&&pool[id].rotation===rot);if(displaced)pool[displaced]={...pool[displaced],rotation:oldRot,farm:oldRot===0};}pool[p.id]={...pool[p.id],rotation:rot,farm:rot===0};return{...s,pool};});}}>
                 <option value={0}>二軍</option>
                 <option value={1}>先1</option><option value={2}>先2</option><option value={3}>先3</option><option value={4}>先4</option><option value={5}>先5</option><option value={6}>先6</option>
-                <option value={11}>中1</option><option value={12}>中2</option><option value={13}>中3</option><option value={14}>中4</option><option value={15}>中5</option>
+                <option value={11}>中1</option><option value={12}>中2</option><option value={13}>中3</option><option value={14}>中4</option><option value={15}>中5</option><option value={16}>中6</option><option value={17}>中7</option><option value={18}>中8</option><option value={19}>中9</option><option value={20}>中10</option>
                 <option value={21}>抑1</option>
               </select></td>
               <td style={S.stickyCol2}><input style={S.nameIn} value={p.name} onChange={e=>updatePlayer(p.id,"name",e.target.value)} /></td>
@@ -1156,7 +1172,7 @@ export default function App(){
               <td><select style={S.numIn} value={p.role} onChange={e=>updatePlayer(p.id,"role",e.target.value)}><option value="SP">先</option><option value="RP">救</option></select></td>
               {["→","↘","↓","↙","←"].map(d=>{const x=(p.pitches||[]).find(q=>q.dir===d);return(<td key={d} style={{fontSize:11,color:"#ccc",whiteSpace:"nowrap",cursor:"pointer",textDecoration:"underline dotted"}} onClick={()=>setPitchEdit(pitchEdit===p.id?null:p.id)}>{x?`${x.dir}${x.henka||3}${kireToGrade(x.kire||3)}`:""}</td>);})}
               <td><select style={S.overallIn} value="" onChange={e=>e.target.value&&applyOverall(p.id,e.target.value)}><option value="">一括</option>{RANKS.map(r=><option key={r} value={r}>{r}</option>)}</select></td>
-              {showInit&&[["W"],["SV"],["seasons"]].map(([f])=><td key={f}><input style={S.initIn} type="number" value={p.init?.[f]||0} onChange={e=>updateInit(p.id,f,e.target.value)} /></td>)}
+              {showInit&&[["W"],["SV"],["seasons"]].map(([f])=><td key={f}><input style={S.initIn} type="number" value={p.init?.[f]||0} onFocus={e=>e.target.select()} onChange={e=>updateInit(p.id,f,e.target.value)} /></td>)}
               <td><button style={S.delBtn} onClick={()=>removePitcher(t.id,p.id)} title="削除">×</button></td>
             </tr>))}
           </tbody></table></div>
