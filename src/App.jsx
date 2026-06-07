@@ -240,8 +240,8 @@ function batterEventProbs(b,factor,form){const c=norm(b.contact),p=norm(b.power)
   const hitCap=historic?1.16:1.11; // 通常.385未満、歴史的のみ100年に1度級で4割（高出塁はAVGを嵩上げするため低め設定）
   const hitBase=clamp(0.160+c*0.138,0.130,0.340)*clamp(fhit,0.6,hitCap);
   // HRは歴史的シーズンならベース率を底上げ（55-59本級。60本超は100年に1度級）
-  const hrBase=historic? (0.010+p*0.052) : (0.007+p*0.050);
-  let hr=clamp(hrBase,0.004,historic?0.088:0.082)*clamp(fhit,0.55,historic?1.90:1.78);
+  const hrBase=historic? (0.007+p*0.044) : (0.004+p*0.035);
+  let hr=clamp(hrBase,0.003,historic?0.075:0.065)*clamp(fhit,0.55,historic?1.90:1.78);
   let triple=0.0025*clamp(fhit,0.6,1.5);                               // 三塁打は稀
   let dbl=hitBase*0.185;
   let sgl=Math.max(0,hitBase-hr-triple-dbl);
@@ -356,8 +356,9 @@ function teamGame(off,def,pool,batStat,pitStat,gameNo){
   if(usedSP&&pitStat[usedSP.id]){const ps=pitStat[usedSP.id];const f=ps.injuryFactor;const spIP=clamp(6.0*f*(0.80+norm(usedSP.stamina)*0.30),3.5,8);
     ps.IP+=spIP;ps.G++;ps.ER+=runs*(spIP/9);ps.SO+=Math.round(spIP*(0.50+norm(effStuff(usedSP))*0.45)*clamp(spForm,0.8,1.5));ps.BB+=Math.max(0,Math.round(spIP*(0.34-norm(usedSP.control)*0.20)));ps.H+=Math.round(runs*0.75+spIP*0.70);if(rnd()<0.18)ps.HR++;
     const remain=9-spIP;
-    const closer=rp.find(p=>p.rotation>=ROTATION_CLOSER_MIN&&p.rotation<=ROTATION_CLOSER_MAX);
-    const mid=rp.filter(p=>!(p.rotation>=ROTATION_CLOSER_MIN&&p.rotation<=ROTATION_CLOSER_MAX));
+    const notExhausted=p=>!pitStat[p.id]||pitStat[p.id].G<(pitStat[p.id].maxG??99);
+    const closer=rp.find(p=>p.rotation>=ROTATION_CLOSER_MIN&&p.rotation<=ROTATION_CLOSER_MAX&&notExhausted(p));
+    const mid=rp.filter(p=>!(p.rotation>=ROTATION_CLOSER_MIN&&p.rotation<=ROTATION_CLOSER_MAX)&&notExhausted(p));
     // runs = 相手打線がうちの投手陣から奪った点数
     // ≤3: 接戦（同点〜3点差リード想定） → セットアッパー(中1〜2)＋抑え
     // ≥4: 4点差以上のリードまたはビハインド → ロング/ビハインド(中3〜5)、セットアッパー温存
@@ -546,7 +547,7 @@ function rollForm(){
 
 function simulateSeason(teams,pool){const batStat={},pitStat={};
   teams.forEach(tm=>{tm.batterIds.forEach(id=>{const b=pool[id];batStat[id]={id,name:b.name,team:tm.name,teamId:tm.id,age:b.age,games:0,maxGames:rollInjury(),form:rollForm(),PA:0,AB:0,H:0,_2B:0,_3B:0,HR:0,BB:0,HBP:0,SO:0,RBI:0,R:0,SB:0};});
-    tm.pitcherIds.forEach(id=>{const p=pool[id];let inj=1;const r=rnd();if(r<0.12)inj=0.5;else if(r<0.2)inj=0.75;pitStat[id]={id,name:p.name,team:tm.name,teamId:tm.id,age:p.age,role:p.role,IP:0,H:0,HR:0,BB:0,SO:0,ER:0,W:0,L:0,SV:0,G:0,injuryFactor:inj,form:rollForm()};});});
+    tm.pitcherIds.forEach(id=>{const p=pool[id];let inj=1;const r=rnd();if(r<0.12)inj=0.5;else if(r<0.2)inj=0.75;const baseMaxG=p.role==="SP"?30:50+Math.floor(rnd()*25);pitStat[id]={id,name:p.name,team:tm.name,teamId:tm.id,age:p.age,role:p.role,IP:0,H:0,HR:0,BB:0,SO:0,ER:0,W:0,L:0,SV:0,G:0,maxG:Math.floor(baseMaxG*inj),injuryFactor:inj,form:rollForm()};});});
   const record={};teams.forEach(tm=>record[tm.id]={name:tm.name,league:tm.league,W:0,L:0,D:0,RS:0,RA:0,id:tm.id});
   const schedule=buildSchedule(teams);
   // 約6試合(1週間)ごとに入れ替え評価。lastSwapGame で重複呼び出しを防ぐ
