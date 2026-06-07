@@ -862,7 +862,7 @@ async function syncToSheet(url,state,year,result){
 async function fetchFromSheet(url){
   const res=await fetch(url,{method:"GET"});
   const data=await res.json();
-  if(!data.ok||!data.raw) throw new Error(data.error||"バックアップが空です");
+  if(!data.ok||!data.raw) throw new Error(data.error||"バックアップが空です（先に「⇧ シートへバックアップ」を実行してください）");
   let d=JSON.parse(data.raw); d=migrate(d); if(!d)throw new Error("データ形式が不正");
   UID=d.UID||0; return d;
 }
@@ -895,11 +895,21 @@ export default function App(){
   const cloneState=(s)=>JSON.parse(JSON.stringify(s));
 
   // シーズン実行：年は進めない。結果を表示し、何度でも再実行できる
-  const runOne=()=>{const r=simulateSeason(state.teams,state.pool);setResult(r);setPendingSeason(r);setNews(null);setTab("results");setStatTab("standings");};
+  const runOne=()=>{
+    const r=simulateSeason(state.teams,state.pool);
+    setResult(r);setPendingSeason(r);setNews(null);setTab("results");setStatTab("standings");
+    const url=getSheetUrl();
+    if(url) syncToSheet(url,state,year,r).catch(()=>{});
+  };
   // 結果に納得→ドラフト画面へ進む
   const proceedToDraft=()=>{if(!pendingSeason){alert("先にシーズンを実行してください");return;}const cfg=state.config||DEFAULT_CONFIG;setDraft(genDraftProspects(cfg.draftBat,cfg.draftPit,state.teams.length));setTab("draft");};
   // ドラフト確定→ここで初めて年が進む
-  const confirmDraft=()=>{const s=cloneState(state);accumulate(s.career,pendingSeason);const n=processOffseason(s,pendingSeason,draft);setState(s);setNews(n);setYear(y=>y+1);setDraft(null);setPendingSeason(null);setTab("results");setStatTab("news");};
+  const confirmDraft=()=>{
+    const s=cloneState(state);accumulate(s.career,pendingSeason);const n=processOffseason(s,pendingSeason,draft);
+    setState(s);setNews(n);setYear(y=>y+1);setDraft(null);setPendingSeason(null);setTab("results");setStatTab("news");
+    const url=getSheetUrl();
+    if(url) syncToSheet(url,s,year+1,null).catch(()=>{});
+  };
   const updateProspect=(kind,ti,pi,field,val)=>setDraft(d=>{const nd={bat:d.bat.map(a=>a.map(o=>({...o}))),pit:d.pit.map(a=>a.map(o=>({...o})))};nd[kind][ti][pi][field]=field==="name"||field==="role"?val:(useRank?rankToVal(val):Number(val));return nd;});
   const resetAll=()=>{if(!confirm("世界をリセットします。よろしいですか？"))return;const {teams,pool}=initLeague();setState({teams,pool,career:{bat:{},pit:{}},hall:[]});setResult(null);setNews(null);setYear(1);setDraft(null);setPendingSeason(null);setTab("setup");};
 
