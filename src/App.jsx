@@ -356,6 +356,7 @@ function teamGame(off,def,pool,batStat,pitStat,gameNo){
     }
     // 残りは守備固め：出場のみ（games++済み）、打席なし
   });
+  let closerPitched=null;
   if(usedSP&&pitStat[usedSP.id]){const ps=pitStat[usedSP.id];const f=ps.injuryFactor;const spIP=clamp(6.0*f*(0.80+norm(usedSP.stamina)*0.30),3.5,8);
     ps.IP+=spIP;ps.G++;ps.ER+=runs*(spIP/9);ps.SO+=Math.round(spIP*(0.50+norm(effStuff(usedSP))*0.45)*clamp(spForm,0.8,1.5));ps.BB+=Math.max(0,Math.round(spIP*(0.34-norm(usedSP.control)*0.20)));ps.H+=Math.round(runs*0.75+spIP*0.70);if(rnd()<0.18)ps.HR++;
     const remain=9-spIP;
@@ -369,7 +370,7 @@ function teamGame(off,def,pool,batStat,pitStat,gameNo){
     const longR=mid.filter(p=>p.rotation>ROTATION_RP_MIN+1).sort((a,b)=>a.rotation-b.rotation);  // 中3〜5
     // remainが多い（早期降板）ほど多くの中継ぎを使う
     const targetN=remain<=2?1+(rnd()<0.50?1:0):remain<=4?2+(rnd()<0.50?1:0):3+(rnd()<0.40?1:0);
-    const relievers=[];let closerPitched=null;
+    const relievers=[];
     if(runs<=3){
       // 接戦: セットアッパー中心
       const src=setup.length?setup:mid;
