@@ -363,19 +363,22 @@ function teamGame(off,def,pool,batStat,pitStat,gameNo){
     // ≥4: 4点差以上のリードまたはビハインド → ロング/ビハインド(中3〜5)、セットアッパー温存
     const setup=mid.filter(p=>p.rotation<=ROTATION_RP_MIN+1).sort((a,b)=>a.rotation-b.rotation); // 中1〜2
     const longR=mid.filter(p=>p.rotation>ROTATION_RP_MIN+1).sort((a,b)=>a.rotation-b.rotation);  // 中3〜5
+    // remainが多い（早期降板）ほど多くの中継ぎを使う
+    const targetN=remain<=2?1+(rnd()<0.50?1:0):remain<=4?2+(rnd()<0.50?1:0):3+(rnd()<0.40?1:0);
     const relievers=[];let closerPitched=null;
     if(runs<=3){
       // 接戦: セットアッパー中心
       const src=setup.length?setup:mid;
-      relievers.push(src[0]);                                          // 中1は必ず登板
-      if(src.length>1&&rnd()<0.60)relievers.push(src[1]);             // 中2は60%
+      for(let i=0;i<Math.min(targetN,src.length);i++){
+        if(i===0||rnd()<(i===1?0.65:0.45))relievers.push(src[i]);
+      }
       // セーブ条件（接戦の最終回）で抑え登板
       if(closer&&rnd()<0.72){relievers.push(closer);closerPitched=closer;}
     }else{
       // 4点差以上/ビハインド: ロングリリーフ・ビハインド登板、セットアッパーは温存
       const src=longR.length?longR:mid;
       const sh=[...src].sort(()=>rnd()-0.5);
-      relievers.push(...sh.slice(0,1+(rnd()<0.45?1:0)));              // 1〜2人
+      relievers.push(...sh.slice(0,Math.min(targetN,sh.length)));
       // 抑えはセーブ条件でないため原則登板しない
     }
     if(!relievers.length&&mid.length)relievers.push(mid[Math.floor(rnd()*mid.length)]);
@@ -544,7 +547,7 @@ function rollForm(){
 function simulateSeason(teams,pool){const batStat={},pitStat={};
   teams.forEach(tm=>{tm.batterIds.forEach(id=>{const b=pool[id];batStat[id]={id,name:b.name,team:tm.name,teamId:tm.id,age:b.age,games:0,maxGames:rollInjury(),form:rollForm(),PA:0,AB:0,H:0,_2B:0,_3B:0,HR:0,BB:0,HBP:0,SO:0,RBI:0,R:0,SB:0};});
     tm.pitcherIds.forEach(id=>{const p=pool[id];let inj=1;const r=rnd();if(r<0.12)inj=0.5;else if(r<0.2)inj=0.75;pitStat[id]={id,name:p.name,team:tm.name,teamId:tm.id,age:p.age,role:p.role,IP:0,H:0,HR:0,BB:0,SO:0,ER:0,W:0,L:0,SV:0,G:0,injuryFactor:inj,form:rollForm()};});});
-  const record={};teams.forEach(tm=>record[tm.id]={name:tm.name,league:tm.league,W:0,L:0,RS:0,RA:0,id:tm.id});
+  const record={};teams.forEach(tm=>record[tm.id]={name:tm.name,league:tm.league,W:0,L:0,D:0,RS:0,RA:0,id:tm.id});
   const schedule=buildSchedule(teams);
   // 約6試合(1週間)ごとに入れ替え評価。lastSwapGame で重複呼び出しを防ぐ
   let lastSwapGame=0;
@@ -552,14 +555,23 @@ function simulateSeason(teams,pool){const batStat={},pitStat={};
     if(m.gameNo>lastSwapGame+5){midSeasonSwap(teams,pool,batStat,pitStat);lastSwapGame=m.gameNo;}
     const home=teams.find(t=>t.id===m.home),away=teams.find(t=>t.id===m.away);
     const hRes=teamGame(home,away,pool,batStat,pitStat,m.gameNo),aRes=teamGame(away,home,pool,batStat,pitStat,m.gameNo);
-    let hR=hRes.runs,aR=aRes.runs;if(hR===aR){if(rnd()<0.5)hR++;else aR++;}
+    let hR=hRes.runs,aR=aRes.runs;
+    // NPB延長：9回終了時同点なら最大3回延長（10〜12回）、決着つかなければ引き分け
+    if(hR===aR){
+      const avgH=home.batterIds.filter(id=>pool[id]&&!pool[id].farm).reduce((s,id)=>{const b=pool[id];return s+(b.contact+b.power+b.eye)/3;},0)/Math.max(1,home.batterIds.filter(id=>pool[id]&&!pool[id].farm).length);
+      const avgA=away.batterIds.filter(id=>pool[id]&&!pool[id].farm).reduce((s,id)=>{const b=pool[id];return s+(b.contact+b.power+b.eye)/3;},0)/Math.max(1,away.batterIds.filter(id=>pool[id]&&!pool[id].farm).length);
+      const ph=0.13+norm(avgH)*0.06,pa=0.13+norm(avgA)*0.06;
+      for(let ex=0;ex<3&&hR===aR;ex++){if(rnd()<ph)hR++;if(rnd()<pa)aR++;}
+    }
     // 先発に勝敗 or ノーデシジョン。NPB同様、約35%は先発に勝敗が付かない（中継ぎが勝利等）
+    const isDraw=hR===aR;
     const decideSP=(spRes,won)=>{ if(!spRes.sp||!pitStat[spRes.sp.id])return; if(rnd()<0.35)return; won?pitStat[spRes.sp.id].W++:pitStat[spRes.sp.id].L++; };
-    decideSP(hRes,hR>aR); decideSP(aRes,aR>hR);
-    const winCloser=hR>aR?aRes.closer:hRes.closer;if(winCloser&&pitStat[winCloser.id]&&Math.abs(hR-aR)<=3)pitStat[winCloser.id].SV++;
+    if(!isDraw){decideSP(hRes,hR>aR); decideSP(aRes,aR>hR);}
+    const winCloser=hR>aR?aRes.closer:hRes.closer;if(!isDraw&&winCloser&&pitStat[winCloser.id]&&Math.abs(hR-aR)<=3)pitStat[winCloser.id].SV++;
     record[home.id].RS+=hR;record[home.id].RA+=aR;record[away.id].RS+=aR;record[away.id].RA+=hR;
-    if(hR>aR){record[home.id].W++;record[away.id].L++;}else{record[away.id].W++;record[home.id].L++;}
-    gameLog.push({gameNo:m.gameNo,home:home.name,away:away.name,homeRuns:hR,awayRuns:aR,winner:hR>aR?home.name:away.name});});
+    if(isDraw){record[home.id].D++;record[away.id].D++;}
+    else if(hR>aR){record[home.id].W++;record[away.id].L++;}else{record[away.id].W++;record[home.id].L++;}
+    gameLog.push({gameNo:m.gameNo,home:home.name,away:away.name,homeRuns:hR,awayRuns:aR,winner:isDraw?"引き分け":hR>aR?home.name:away.name});});
   // 両リーグ優勝決定→日本シリーズ
   const cl=Object.values(record).filter(r=>r.league==="central").sort((a,b)=>(b.W/Math.max(1,b.W+b.L))-(a.W/Math.max(1,a.W+a.L)));
   const pl=Object.values(record).filter(r=>r.league==="pacific").sort((a,b)=>(b.W/Math.max(1,b.W+b.L))-(a.W/Math.max(1,a.W+a.L)));
@@ -809,13 +821,13 @@ function buildViewTables(state,result){
   const tables={};
   // 順位表（resultがあるときのみ）
   if(result){
-    const allR=Object.values(result.record).map(r=>({...r,PCT:r.W/Math.max(1,r.W+r.L),DIFF:r.RS-r.RA}));
-    const mk=(lg)=>allR.filter(r=>r.league===lg).sort((a,b)=>b.PCT-a.PCT).map((r,i)=>[i+1,r.name,r.W,r.L,Number(f3(r.PCT)),r.RS,r.RA,r.DIFF]);
+    const allR=Object.values(result.record).map(r=>({...r,PCT:r.W/Math.max(1,r.W+r.L+r.D*0.5),DIFF:r.RS-r.RA}));
+    const mk=(lg)=>allR.filter(r=>r.league===lg).sort((a,b)=>b.PCT-a.PCT).map((r,i)=>[i+1,r.name,r.W,r.L,r.D||0,Number(f3(r.PCT)),r.RS,r.RA,r.DIFF]);
     const lnC=state.config?.leagueNameC||LEAGUE_NAMES.central;const lnP=state.config?.leagueNameP||LEAGUE_NAMES.pacific;
-    tables.standings=[["リーグ","順位","チーム","勝","敗","勝率","得点","失点","得失"],
+    tables.standings=[["リーグ","順位","チーム","勝","敗","分","勝率","得点","失点","得失"],
       ...mk("central").map(row=>[lnC,...row]),
       ...mk("pacific").map(row=>[lnP,...row])];
-    if(result.japanSeries){ tables.standings.push(["","","","","","","","",""]); tables.standings.push(["日本一",result.japanSeries.champion,`${result.japanSeries.centralChamp} ${result.japanSeries.wC}-${result.japanSeries.wP} ${result.japanSeries.pacificChamp}`,"","","","","",""]); }
+    if(result.japanSeries){ tables.standings.push(["","","","","","","","","",""]); tables.standings.push(["日本一",result.japanSeries.champion,`${result.japanSeries.centralChamp} ${result.japanSeries.wC}-${result.japanSeries.wP} ${result.japanSeries.pacificChamp}`,"","","","","","",""]); }
     const bat=computeBatting(Object.values(result.batStat)).sort((a,b)=>b.HR-a.HR);
     tables.batting=[["選手","チーム","G","PA","AB","H","2B","3B","HR","RBI","SB","BB","SO","AVG","OBP","SLG","OPS","ISO","wOBA","wRC+"],...bat.map(s=>[s.name,s.team,s.games,s.PA,s.AB,s.H,s._2B,s._3B,s.HR,s.RBI,s.SB,s.BB,s.SO,Number(f3(s.AVG)),Number(f3(s.OBP)),Number(f3(s.SLG)),Number(f3(s.OPS)),Number(f3(s.ISO)),Number(f3(s.wOBA)),s.wRCp])];
     const pit=computePitching(Object.values(result.pitStat)).sort((a,b)=>b.W-a.W);
