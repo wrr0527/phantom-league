@@ -980,10 +980,29 @@ export default function App(){
     <div style={S.page}>
       <style>{CSS}</style>
       <header style={S.header}><div style={S.logo}>◆ PHANTOM LEAGUE</div><div style={S.sub}>妄想選手名鑑 · {GAMES}試合 · {state.teams.length}球団 · {year-1>=1?`第${year-1}シーズン終了`:"開幕前"}</div></header>
+      {(()=>{
+        // 全チームのバリデーション（打順・守備位置・人数）
+        window._teamErrs=state.teams.map(t=>{
+          const starters=t.batterIds.map(id=>state.pool[id]).filter(b=>b&&b.order>=1&&b.order<=9);
+          const usedOrders=starters.map(b=>b.order);
+          const usedPos=starters.map(b=>b.position||"LF");
+          const ALL9POS=["C","1B","2B","3B","SS","LF","CF","RF","DH"];
+          const missingOrders=[1,2,3,4,5,6,7,8,9].filter(o=>!usedOrders.includes(o));
+          const dupOrders=usedOrders.filter((o,i)=>usedOrders.indexOf(o)!==i);
+          const missingPos=ALL9POS.filter(p=>!usedPos.includes(p));
+          const dupPos=usedPos.filter((p,i)=>usedPos.indexOf(p)!==i);
+          const batCount=t.batterIds.map(id=>state.pool[id]).filter(Boolean).length;
+          const pitCount=t.pitcherIds.map(id=>state.pool[id]).filter(Boolean).length;
+          return{id:t.id,name:t.name,missingOrders,dupOrders,missingPos,dupPos,batCount,pitCount,
+            batOver:batCount>16,pitOver:pitCount>12,
+            ok:missingOrders.length===0&&dupOrders.length===0&&missingPos.length===0&&dupPos.length===0&&batCount<=16&&pitCount<=12};
+        });
+        return null;
+      })()}
       <nav style={S.nav}>
         <button style={tab==="setup"?S.navBtnA:S.navBtn} onClick={()=>setTab("setup")}>SETUP</button>
         <button style={tab==="results"?S.navBtnA:S.navBtn} onClick={()=>result&&setTab("results")} disabled={!result}>RESULTS</button>
-        <button style={S.runBtn} onClick={runOne}>{pendingSeason?"↻ 同じ年を再実行":"▶ シーズン実行"}</button>
+        <button style={S.runBtn} onClick={runOne} disabled={!!(window._teamErrs&&window._teamErrs.some(e=>!e.ok))} title={window._teamErrs&&window._teamErrs.some(e=>!e.ok)?"チーム編成エラーを修正してください":undefined}>{pendingSeason?"↻ 同じ年を再実行":"▶ シーズン実行"}</button>
         {pendingSeason && <button style={S.proceedBtn} onClick={proceedToDraft}>オフへ進む ▶</button>}
         <button style={S.ioBtn} onClick={()=>{setIoOpen(true);setIoText("");}}>⇩ 取込</button>
         <button style={S.ioBtn} onClick={doExport}>⇧ 書出</button>
@@ -1045,7 +1064,38 @@ export default function App(){
               <option value="central">{state.config?.leagueNameC||LEAGUE_NAMES.central}</option><option value="pacific">{state.config?.leagueNameP||LEAGUE_NAMES.pacific}</option>
             </select>
           </div>
-          {(()=>{const cfg=state.config||DEFAULT_CONFIG;const batLim=cfg.battersPerTeam||BATTERS_PER_TEAM;const pitLim=cfg.pitchersPerTeam||PITCHERS_PER_TEAM;const bat1=t.batterIds.map(id=>state.pool[id]).filter(p=>p&&!p.farm).length;const pit1=t.pitcherIds.map(id=>state.pool[id]).filter(p=>p&&!p.farm&&p.rotation!==0).length;const batTotal=t.batterIds.map(id=>state.pool[id]).filter(Boolean).length;const pitTotal=t.pitcherIds.map(id=>state.pool[id]).filter(Boolean).length;return(<div style={{display:"flex",gap:12,alignItems:"center",margin:"10px 0 4px",flexWrap:"wrap"}}><span style={{fontSize:12,color:"#7a8a7a"}}>野手</span><span style={{fontSize:13,fontWeight:"bold",color:"#7ec87e"}}>{bat1}</span><span style={{fontSize:11,color:"#7a8a7a"}}>1軍</span><span style={{fontSize:12,color:"#7a8a7a"}}>/</span><span style={{fontSize:13,fontWeight:"bold",color:"#d8e0d8"}}>{batTotal}</span><span style={{fontSize:11,color:"#7a8a7a"}}>全　</span><span style={{fontSize:12,color:"#7a8a7a"}}>投手</span><span style={{fontSize:13,fontWeight:"bold",color:"#7ec87e"}}>{pit1}</span><span style={{fontSize:11,color:"#7a8a7a"}}>1軍</span><span style={{fontSize:12,color:"#7a8a7a"}}>/</span><span style={{fontSize:13,fontWeight:"bold",color:"#d8e0d8"}}>{pitTotal}</span><span style={{fontSize:11,color:"#7a8a7a"}}>全</span></div>);})()}
+          {(()=>{
+            const cfg=state.config||DEFAULT_CONFIG;
+            const bat1=t.batterIds.map(id=>state.pool[id]).filter(p=>p&&!p.farm).length;
+            const pit1=t.pitcherIds.map(id=>state.pool[id]).filter(p=>p&&!p.farm&&p.rotation!==0).length;
+            const batTotal=t.batterIds.map(id=>state.pool[id]).filter(Boolean).length;
+            const pitTotal=t.pitcherIds.map(id=>state.pool[id]).filter(Boolean).length;
+            const errs=window._teamErrs&&window._teamErrs.find(e=>e.id===t.id);
+            const warnItems=[];
+            if(errs){
+              if(errs.missingOrders.length>0)warnItems.push("打順未設定: "+errs.missingOrders.join(", "));
+              if(errs.dupOrders.length>0)warnItems.push("打順重複: "+[...new Set(errs.dupOrders)].join(", "));
+              if(errs.missingPos.length>0)warnItems.push("守位未設定: "+errs.missingPos.join(", "));
+              if(errs.dupPos.length>0)warnItems.push("守位重複: "+[...new Set(errs.dupPos)].join(", "));
+            }
+            return(<>
+              <div style={{display:"flex",gap:12,alignItems:"center",margin:"10px 0 4px",flexWrap:"wrap"}}>
+                <span style={{fontSize:12,color:"#7a8a7a"}}>野手</span>
+                <span style={{fontSize:13,fontWeight:"bold",color:"#7ec87e"}}>{bat1}</span>
+                <span style={{fontSize:11,color:"#7a8a7a"}}>1軍</span>
+                <span style={{fontSize:12,color:"#7a8a7a"}}>/</span>
+                <span style={{fontSize:13,fontWeight:"bold",color:batTotal>16?"#ff6b6b":"#d8e0d8"}}>{batTotal}</span>
+                <span style={{fontSize:11,color:"#7a8a7a"}}>全{batTotal>16&&<span style={{color:"#ff6b6b",marginLeft:2}}>（上限16）</span>}</span>
+                <span style={{fontSize:12,color:"#7a8a7a",marginLeft:8}}>投手</span>
+                <span style={{fontSize:13,fontWeight:"bold",color:"#7ec87e"}}>{pit1}</span>
+                <span style={{fontSize:11,color:"#7a8a7a"}}>1軍</span>
+                <span style={{fontSize:12,color:"#7a8a7a"}}>/</span>
+                <span style={{fontSize:13,fontWeight:"bold",color:pitTotal>12?"#ff6b6b":"#d8e0d8"}}>{pitTotal}</span>
+                <span style={{fontSize:11,color:"#7a8a7a"}}>全{pitTotal>12&&<span style={{color:"#ff6b6b",marginLeft:2}}>（上限12）</span>}</span>
+              </div>
+              {warnItems.length>0&&<div style={{fontSize:12,color:"#ff6b6b",margin:"2px 0 6px",lineHeight:1.6}}>{warnItems.map((w,i)=><div key={i}>⚠ {w}</div>)}</div>}
+            </>);
+          })()}
           <div style={S.sectionLabel}>野手 — 打順 / 打 / 守位 / 守備 / 年齢 / ミート / パワー / 選球眼 / 走力 / 総合{showInit?" ｜ HR/安/年":""}</div>
           <div style={S.scrollX}><table style={S.editTable}><tbody>
             <tr style={S.editHead}><td style={S.stickyCol1}>打順</td><td style={S.stickyCol2}>名前</td><td>打</td><td>守位</td><td>守備</td><td>外</td><td>年</td><td>ミート</td><td>パワー</td><td>選球</td><td>走力</td><td>総合</td>{showInit&&<><td>HR</td><td>安</td><td>年</td></>}<td></td></tr>
