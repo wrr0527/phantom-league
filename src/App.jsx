@@ -969,16 +969,6 @@ export default function App(){
 
   // シーズン実行：年は進めない。結果を表示し、何度でも再実行できる
   const runOne=()=>{
-    // 外国人枠チェック（1軍登録5人以下）
-    const foreignErrors=state.teams.filter(tm=>{
-      const allIds=[...tm.batterIds,...tm.pitcherIds];
-      const activeFor=allIds.filter(id=>state.pool[id]&&state.pool[id].foreign&&!state.pool[id].farm).length;
-      return activeFor>FOREIGN_ON_FIELD;
-    });
-    if(foreignErrors.length>0){
-      alert(`外国人枠オーバーのチームがあります（1軍登録${FOREIGN_ON_FIELD}人以内）：\n${foreignErrors.map(tm=>{const cnt=[...tm.batterIds,...tm.pitcherIds].filter(id=>state.pool[id]?.foreign&&!state.pool[id]?.farm).length;return `・${tm.name}（${cnt}人）`;}).join("\n")}\n\nSETUP画面で外国人選手をファームへ送るか、チェックを外してください。`);
-      return;
-    }
     try{
       const r=simulateSeason(state.teams,state.pool);
       setResult(r);setPendingSeason(r);setNews(null);setTab("results");setStatTab("standings");
@@ -1134,9 +1124,11 @@ export default function App(){
           const sp1=t.pitcherIds.map(id=>state.pool[id]).filter(p=>p&&!p.farm&&p.role==="SP"&&p.rotation>=1&&p.rotation<=ROTATION_SIZE).length;
           const registered=bat1+pit1;
           const bench=bat1+(pit1-Math.max(0,sp1-1));
+          const foreignCount=[...t.batterIds,...t.pitcherIds].filter(id=>state.pool[id]?.foreign&&!state.pool[id]?.farm).length;
+          const foreignOver=foreignCount>FOREIGN_ON_FIELD;
           return{id:t.id,name:t.name,missingOrders,dupOrders,missingPos,dupPos,
-            regOver:registered>ROSTER_31,benchOver:bench>BENCH_26,
-            ok:missingOrders.length===0&&dupOrders.length===0&&missingPos.length===0&&dupPos.length===0&&registered<=ROSTER_31&&bench<=BENCH_26};
+            regOver:registered>ROSTER_31,benchOver:bench>BENCH_26,foreignCount,foreignOver,
+            ok:missingOrders.length===0&&dupOrders.length===0&&missingPos.length===0&&dupPos.length===0&&registered<=ROSTER_31&&bench<=BENCH_26&&!foreignOver};
         });
         return null;
       })()}
@@ -1217,6 +1209,8 @@ export default function App(){
             const bench=bat1+(pit1-Math.max(0,sp1-1));
             const regOver=registered>ROSTER_31;
             const benchOver=bench>BENCH_26;
+            const foreignCount=[...t.batterIds,...t.pitcherIds].filter(id=>state.pool[id]?.foreign&&!state.pool[id]?.farm).length;
+            const foreignOver=foreignCount>FOREIGN_ON_FIELD;
             const errs=window._teamErrs&&window._teamErrs.find(e=>e.id===t.id);
             const warnItems=[];
             if(errs){
@@ -1226,6 +1220,7 @@ export default function App(){
               if(errs.dupPos.length>0)warnItems.push("守位重複: "+[...new Set(errs.dupPos)].join(", "));
               if(regOver)warnItems.push(`1軍登録${registered}人 → ${ROSTER_31}人以内にしてください`);
               if(benchOver)warnItems.push(`ベンチ入り${bench}人 → ${BENCH_26}人以内にしてください`);
+              if(foreignOver)warnItems.push(`外国人1軍登録${foreignCount}人 → ${FOREIGN_ON_FIELD}人以内にしてください`);
             }
             return(<>
               <div style={{display:"flex",gap:0,alignItems:"stretch",margin:"10px 0 4px",flexWrap:"wrap",background:"#1a2a1a",borderRadius:6,overflow:"hidden",border:"1px solid #2a3a2a"}}>
@@ -1249,10 +1244,15 @@ export default function App(){
                   <span style={{fontSize:16,fontWeight:"bold",color:regOver?"#ff6b6b":"#d8e0d8",lineHeight:1}}>{registered}<span style={{fontSize:11,fontWeight:"normal",color:"#5a7a5a"}}>/{ROSTER_31}</span></span>
                   <span style={{fontSize:10,color:regOver?"#ff6b6b":"#5a7a5a",marginTop:2}}>{regOver?"超過！":"OK"}</span>
                 </div>
-                <div style={{display:"flex",flexDirection:"column",alignItems:"center",padding:"6px 14px",minWidth:100}}>
+                <div style={{display:"flex",flexDirection:"column",alignItems:"center",padding:"6px 14px",borderRight:"1px solid #2a3a2a",minWidth:100}}>
                   <span style={{fontSize:10,color:"#5a7a5a",marginBottom:2}}>ベンチ入り</span>
                   <span style={{fontSize:16,fontWeight:"bold",color:benchOver?"#ff6b6b":"#d8e0d8",lineHeight:1}}>{bench}<span style={{fontSize:11,fontWeight:"normal",color:"#5a7a5a"}}>/{BENCH_26}</span></span>
                   <span style={{fontSize:10,color:"#5a7a5a",marginTop:2}}>先発{sp1}人中{Math.max(0,sp1-1)}人オフ</span>
+                </div>
+                <div style={{display:"flex",flexDirection:"column",alignItems:"center",padding:"6px 14px",minWidth:80}}>
+                  <span style={{fontSize:10,color:"#5a7a5a",marginBottom:2}}>外国人1軍</span>
+                  <span style={{fontSize:16,fontWeight:"bold",color:foreignOver?"#ff6b6b":"#d8e0d8",lineHeight:1}}>{foreignCount}<span style={{fontSize:11,fontWeight:"normal",color:"#5a7a5a"}}>/{FOREIGN_ON_FIELD}</span></span>
+                  <span style={{fontSize:10,color:foreignOver?"#ff6b6b":"#5a7a5a",marginTop:2}}>{foreignOver?"超過！":"OK"}</span>
                 </div>
               </div>
               {warnItems.length>0&&<div style={{fontSize:12,color:"#ff6b6b",margin:"2px 0 6px",lineHeight:1.6}}>{warnItems.map((w,i)=><div key={i}>⚠ {w}</div>)}</div>}
