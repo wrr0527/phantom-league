@@ -445,15 +445,17 @@ function midSeasonSwap(teams,pool,batStat,pitStat){
     };
     const bat1=tm.batterIds.map(id=>pool[id]).filter(p=>p&&!p.farm&&p.status==="active");
     const batF=tm.batterIds.map(id=>pool[id]).filter(p=>p&&p.farm&&p.status==="active");
-    // スタメン含む1軍全員を降格候補に（不振なら誰でも対象）
-    const batDown=bat1.filter(b=>batDScore(b)>0).sort((a,b)=>batDScore(b)-batDScore(a));
-    // 2軍は能力順に昇格候補（一度落ちた選手も戻れる）
+    // 降格候補：控え(order=0)を優先。スタメン(1-9)はDScore>0.07の重度不振のみ
+    const batDown=[
+      ...bat1.filter(b=>b.order===0&&batDScore(b)>0),
+      ...bat1.filter(b=>b.order>=1&&b.order<=9&&batDScore(b)>0.07),
+    ].sort((a,b)=>batDScore(b)-batDScore(a));
+    // 2軍は能力順に昇格候補
     const batUp=batF.slice().sort((a,b)=>batAbil(b)-batAbil(a));
     const batN=Math.min(batDown.length,batUp.length,2);
     for(let i=0;i<batN;i++){
       const down=batDown[i],up=batUp[i];if(!down||!up)break;
-      // 降格選手より2軍選手の能力が低いなら確率低下
-      const gap=batAbil(down)-batAbil(up); // 正=降格者が能力上
+      const gap=batAbil(down)-batAbil(up);
       const prob=gap>25?0.20:gap>10?0.45:0.65;
       if(rnd()<prob){
         down.farm=true;  // order は保持：戻ってきたとき元の打順に戻る
