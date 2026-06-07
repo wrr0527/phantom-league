@@ -152,21 +152,17 @@ const _mkPicker=arr=>{let t=0;const c=arr.map(([n,w])=>(t+=w,[t,n]));return()=>{
 const _pickSurname=_mkPicker(SURNAMES_W);
 const _pickGiven=_mkPicker(GIVEN_W);
 const randName=()=>_pickSurname()+_pickGiven();
-// 外国人選手名生成（米系/スペイン語系/中国系/韓国系をバランスよく）
-const FOREIGN_FIRST_US=["マイケル","ブランドン","クリス","タイラー","ライアン","ジャスティン","ニック","ジョシュ","コーリー","アーロン","トラビス","ダラス","ブレット","トレイ","ゲイリー","ランディ"];
-const FOREIGN_LAST_US=["ジョンソン","スミス","デービス","ウィルソン","アンダーソン","テイラー","マーティン","ジャクソン","ハリス","ホワイト","ミラー","ムーア","トーマス","クラーク","ルイス"];
-const FOREIGN_FIRST_ES=["カルロス","ミゲル","フアン","ホセ","マヌエル","エドウィン","ロベルト","フェリックス","エリック","ラファエル","ルイス","ジオバニー","ビクトル","ネルソン","オルランド"];
-const FOREIGN_LAST_ES=["マルティネス","ロドリゲス","ガルシア","ロペス","ゴンサレス","ペレス","トーレス","フローレス","リベラ","モラレス","エレーラ","メディナ","カストロ","ロメロ","デルガード"];
-const FOREIGN_FIRST_ZH=["偉","浩","明","志","剛","強","建","勇","超","磊","鑫","龍","彬","旭","凱"];
-const FOREIGN_LAST_ZH=["陳","王","李","張","劉","楊","黃","趙","吳","周","徐","孫","朱","馬","林"];
-const FOREIGN_FIRST_KR=["ジュンホ","スンヨプ","チャンホ","ドンヒョン","ジョンソプ","スンファン","ヒョンジン","ジウォン","サンス","ジョンウ","ミンジュン","ジョンギュ","テヒョン","ジョンウォン","ウソク"];
-const FOREIGN_LAST_KR=["パク","イ","キム","チェ","チョン","ユ","ハン","シン","ソン","ヤン","コ","オ","リュ","クォン","アン"];
+// 外国人選手名（NPB登録名6文字以内。姓のみ表記）
+const FN_US=["スミス","ハリス","ムーア","ルイス","クラーク","ミラー","ホワイト","デービス","ブラウン","マーチン","グリーン","ライト","スコット","ヤング","キング","ベイカー","ロス","シャープ","ブレット","ランス","コービン","ゲレロ","バーンズ","フォード","ホール","プライス","ロング","ショー","ハント","リード"];
+const FN_ES=["ガルシア","ロペス","ペレス","リベラ","モラレス","カストロ","ロメロ","メヒア","ラミレス","ゴメス","フローレス","トーレス","ナバロ","ブランコ","ソト","グラード","パラ","ニエベス","ウリアス","ソリア","ベガ","ルナ","クルス","ソウザ","ピレラ"];
+const FN_ZH=[["陳","偉"],["王","浩"],["李","明"],["張","志"],["劉","剛"],["楊","強"],["黃","建"],["趙","勇"],["林","超"],["呉","龍"]];
+const FN_KR=["パク","キム","チェ","ソン","イ","ハン","リュ","ユ","シン","クォン","チョン","ヤン","カン","オム","ナム"];
 function randForeignName(){
   const r=rnd();
-  if(r<0.30){return FOREIGN_FIRST_US[Math.floor(rnd()*FOREIGN_FIRST_US.length)]+"・"+FOREIGN_LAST_US[Math.floor(rnd()*FOREIGN_LAST_US.length)];}
-  if(r<0.60){return FOREIGN_FIRST_ES[Math.floor(rnd()*FOREIGN_FIRST_ES.length)]+"・"+FOREIGN_LAST_ES[Math.floor(rnd()*FOREIGN_LAST_ES.length)];}
-  if(r<0.80){return FOREIGN_LAST_ZH[Math.floor(rnd()*FOREIGN_LAST_ZH.length)]+FOREIGN_FIRST_ZH[Math.floor(rnd()*FOREIGN_FIRST_ZH.length)];}
-  return FOREIGN_LAST_KR[Math.floor(rnd()*FOREIGN_LAST_KR.length)]+"・"+FOREIGN_FIRST_KR[Math.floor(rnd()*FOREIGN_FIRST_KR.length)];
+  if(r<0.30)return FN_US[Math.floor(rnd()*FN_US.length)];
+  if(r<0.58){const es=FN_ES[Math.floor(rnd()*FN_ES.length)];return es;}
+  if(r<0.78){const zh=FN_ZH[Math.floor(rnd()*FN_ZH.length)];return zh[0]+zh[1];}
+  return FN_KR[Math.floor(rnd()*FN_KR.length)];
 }
 // NPB年齢分布（18〜36歳）
 const AGE_W=[[18,3],[19,5],[20,7],[21,9],[22,10],[23,10],[24,9],[25,8],[26,7],[27,6],[28,5],[29,4],[30,4],[31,3],[32,2],[33,2],[34,1],[35,1],[36,1]];
@@ -260,9 +256,9 @@ function batterEventProbs(b,factor,form){const c=norm(b.contact),p=norm(b.power)
   let k=clamp(0.21-c*0.12,0.085,0.27)*clamp(fk,0.6,1.5);
   const hitCap=historic?1.16:1.11; // 通常.385未満、歴史的のみ100年に1度級で4割（高出塁はAVGを嵩上げするため低め設定）
   const hitBase=clamp(0.160+c*0.138,0.130,0.340)*clamp(fhit,0.6,hitCap);
-  // HRは歴史的シーズンならベース率を底上げ（55-59本級。60本超は100年に1度級）
-  const hrBase=historic? (0.007+p*0.044) : (0.004+p*0.035);
-  let hr=clamp(hrBase,0.003,historic?0.075:0.065)*clamp(fhit,0.55,historic?1.90:1.78);
+  // HRはNPB水準（平均10-15本、エリート30-40本）
+  const hrBase=historic? (0.012+p*0.100) : (0.008+p*0.075);
+  let hr=clamp(hrBase,0.004,historic?0.110:0.095)*clamp(fhit,0.55,historic?1.90:1.78);
   let triple=0.0025*clamp(fhit,0.6,1.5);                               // 三塁打は稀
   let dbl=hitBase*0.185;
   let sgl=Math.max(0,hitBase-hr-triple-dbl);
@@ -273,12 +269,12 @@ function simInning(ls,batStat,getProbs){let outs=0,bases=[false,false,false],run
   while(outs<3&&safety<60){safety++;const b=ls.next();const st=batStat[b.id];const pr=getProbs(b);const x=rnd();let cum=0;if(st)st.PA++;
     cum+=pr.k;if(x<cum){if(st){st.AB++;st.SO++;}outs++;continue;}
     cum+=pr.out;if(x<cum){if(st)st.AB++;if(bases[0]&&outs<2&&rnd()<0.12){outs+=2;bases[0]=false;}else{outs++;if(bases[2]&&outs<3&&rnd()<0.25){runs++;bases[2]=false;if(st)st.RBI++;}}continue;}
-    cum+=pr.bb;if(x<cum){if(st)st.BB++;const r=pushWalk(bases);runs+=r;if(st)st.RBI+=r;continue;}
+    cum+=pr.bb;if(x<cum){if(st)st.BB++;const r=pushWalk(bases);runs+=r;if(st){st.RBI+=r;if(!bases[1]&&norm(b.speed)>0.40&&rnd()<norm(b.speed)*0.22)st.SB++;}continue;}
     cum+=pr.hbp;if(x<cum){if(st)st.HBP++;const r=pushWalk(bases);runs+=r;if(st)st.RBI+=r;continue;}
     cum+=pr.hr;if(x<cum){const r=1+(bases[0]?1:0)+(bases[1]?1:0)+(bases[2]?1:0);bases=[false,false,false];runs+=r;if(st){st.AB++;st.H++;st.HR++;st.RBI+=r;st.R++;}continue;}
     cum+=pr.triple;if(x<cum){const r=(bases[0]?1:0)+(bases[1]?1:0)+(bases[2]?1:0);bases=[false,false,true];runs+=r;if(st){st.AB++;st.H++;st._3B++;st.RBI+=r;}continue;}
     cum+=pr.dbl;if(x<cum){let r=(bases[1]?1:0)+(bases[2]?1:0);let third=false;if(bases[0]){if(rnd()<0.45)r++;else third=true;}bases=[false,true,third];runs+=r;if(st){st.AB++;st.H++;st._2B++;st.RBI+=r;}continue;}
-    {let r=bases[2]?1:0;let third=bases[1];if(bases[1]&&rnd()<0.55){r++;third=false;}bases=[true,bases[0],third];runs+=r;if(st){st.AB++;st.H++;st.RBI+=r;if(norm(b.speed)>0.55&&rnd()<norm(b.speed)*0.10)st.SB++;}}
+    {let r=bases[2]?1:0;let third=bases[1];if(bases[1]&&rnd()<0.55){r++;third=false;}bases=[true,bases[0],third];runs+=r;if(st){st.AB++;st.H++;st.RBI+=r;if(!bases[1]&&norm(b.speed)>0.35&&rnd()<norm(b.speed)*0.52)st.SB++;}}
   }return runs;}
 function pitcherFactor(p){return clamp(1.30-norm(effStuff(p))*0.40-norm(p.control)*0.20,0.65,1.35);}
 
@@ -353,7 +349,7 @@ function teamGame(off,def,pool,batStat,pitStat,gameNo){
   const factor=pitcherFactor(usedSP)*(0.85+rnd()*0.3)/Math.sqrt(spForm); // 好調(form>1)ほどfactor低下＝抑える
   const cache={};const getProbs=(b)=>cache[b.id]||(cache[b.id]=batterEventProbs(b,factor,batStat[b.id]?.form));
   let idx=0;const {lineup,bench}=pickLineup(off,pool,batStat);const ls={next:()=>lineup[idx++%lineup.length]};
-  let runs=0;for(let i=0;i<9;i++)runs+=simInning(ls,batStat,getProbs);
+  const innings=[];let runs=0;for(let i=0;i<9;i++){const r=simInning(ls,batStat,getProbs);innings.push(r);runs+=r;}
   lineup.forEach(b=>{if(batStat[b.id])batStat[b.id].games++;});
   // 控えの部分出場（代打・代走・守備固め）：毎試合1〜3人が1打席前後だけ出る
   const subCount=Math.min(bench.length, 1+Math.floor(rnd()*3));
@@ -370,7 +366,7 @@ function teamGame(off,def,pool,batStat,pitStat,gameNo){
       else if(x<pr.k+pr.bb+pr.hr+pr.dbl+pr.sgl){st.AB++;st.H++;}
       else {st.AB++;}
     } else if(role<0.75){ // 代走：打席なし、稀に盗塁
-      if(norm(b.speed)>0.5&&rnd()<0.15)st.SB++;
+      if(norm(b.speed)>0.35&&rnd()<norm(b.speed)*0.60)st.SB++;
     }
     // 残りは守備固め：出場のみ（games++済み）、打席なし
   });
@@ -406,7 +402,7 @@ function teamGame(off,def,pool,batStat,pitStat,gameNo){
     }
     if(!relievers.length&&mid.length)relievers.push(mid[Math.floor(rnd()*mid.length)]);
     relievers.forEach(p=>{if(!pitStat[p.id])return;const seg=remain/Math.max(1,relievers.length);const rs=pitStat[p.id];rs.IP+=seg;rs.G++;rs.ER+=(runs/9)*seg;rs.SO+=Math.round(seg*(0.60+norm(effStuff(p))*0.50));rs.BB+=Math.max(0,Math.round(seg*(0.33-norm(p.control)*0.16)));rs.H+=Math.round(seg*0.92);});}
-  return {runs, sp:usedSP, closer:closerPitched};
+  return {runs, innings, sp:usedSP, closer:closerPitched};
 }
 
 function rollInjury(){const r=rnd();if(r<0.50)return GAMES;if(r<0.78)return Math.floor(GAMES*(0.7+rnd()*0.25));if(r<0.94)return Math.floor(GAMES*(0.4+rnd()*0.3));return Math.floor(GAMES*(0.05+rnd()*0.3));}
@@ -627,7 +623,7 @@ function simulateSeason(teams,pool){const batStat={},pitStat={};
     record[home.id].RS+=hR;record[home.id].RA+=aR;record[away.id].RS+=aR;record[away.id].RA+=hR;
     if(isDraw){record[home.id].D++;record[away.id].D++;}
     else if(hR>aR){record[home.id].W++;record[away.id].L++;}else{record[away.id].W++;record[home.id].L++;}
-    gameLog.push({gameNo:m.gameNo,home:home.name,away:away.name,homeRuns:hR,awayRuns:aR,winner:isDraw?"引き分け":hR>aR?home.name:away.name});});
+    gameLog.push({gameNo:m.gameNo,home:home.name,away:away.name,homeRuns:hR,awayRuns:aR,winner:isDraw?"引き分け":hR>aR?home.name:away.name,hi:hRes.innings,ai:aRes.innings});});
   // 両リーグ順位決定→CS→日本シリーズ
   const cl=Object.values(record).filter(r=>r.league==="central").sort((a,b)=>(b.W/Math.max(1,b.W+b.L))-(a.W/Math.max(1,a.W+a.L)));
   const pl=Object.values(record).filter(r=>r.league==="pacific").sort((a,b)=>(b.W/Math.max(1,b.W+b.L))-(a.W/Math.max(1,a.W+a.L)));
@@ -695,31 +691,28 @@ function processOffseason(state,season,draftPicks){const {teams,pool,career,hall
   teams.forEach(tm=>{const judge=(ids,kind)=>{ids.slice().forEach(id=>{const p=pool[id];if(!p||p.status!=="active")return;const perf=kind==="bat"?perfBat(id):perfPit(id);const played=kind==="bat"?(season.batStat[id]?.PA||0):(season.pitStat[id]?.IP||0);const lowPerf=kind==="bat"?perf<70:perf<55;const thinPlay=kind==="bat"?played<150:played<25;
     if(p.age>=25&&lowPerf&&thinPlay&&rnd()<0.20){p.status="fa";removeFromTeam(teams,p);news.release.push(`${tm.name} ${p.name}（${p.age}歳）戦力外`);}else if(p.age>=30&&lowPerf&&rnd()<0.10){p.status="fa";removeFromTeam(teams,p);news.release.push(`${tm.name} ${p.name}（${p.age}歳）戦力外`);}});};
     judge(tm.batterIds,"bat");judge(tm.pitcherIds,"pit");});
-  // FA宣言：有資格者(8年在籍)のうち、好成績の選手が中心に低確率で宣言。年4人前後に制限（NPB水準）
+  // FA宣言：有資格者(8年在籍)のうち年6人前後に制限（NPB水準）
   const faEligible=Object.values(pool).filter(p=>p.status==="active"&&p.yearsOnTeam>=FA_YEARS);
   let faDeclared=0;
+  const faDeclaredPlayers=[];
   faEligible.forEach(p=>{
-    if(faDeclared>=4)return;
+    if(faDeclared>=6)return;
     const perf=p.kind==="bat"?perfBat(p.id):perfPit(p.id);
     const good=p.kind==="bat"?perf>=95:perf>=105;
-    const rate=good?0.18:0.04;
-    if(rnd()<rate){p.status="fa";removeFromTeam(teams,p);news.fa.push(`${p.name} FA宣言`);faDeclared++;}
+    const rate=good?0.25:0.06;
+    if(rnd()<rate){p.status="fa";const prevTeamId=p.teamId;removeFromTeam(teams,p);news.fa.push(`${p.name} FA宣言`);faDeclaredPlayers.push({p,prevTeamId});faDeclared++;}
   });
   // FA・自由契約選手の再契約（争奪戦）。好成績選手ほど強豪が獲得、不振選手は浪人もありうる
-  // チームの「魅力度」=前年の勝率（強いチームが有力FAを引き寄せる）
   const teamStrength={};
   teams.forEach(tm=>{const rec=Object.values(season.record||{}).find(r=>r.id===tm.id);teamStrength[tm.id]=rec?(rec.W/Math.max(1,rec.W+rec.L)):0.5;});
   const fas=Object.values(pool).filter(p=>p.status==="fa");
-  // 良い選手から順に契約を決める（FA市場の目玉から動く）
   fas.sort((a,b)=>{const ra=a.kind==="bat"?perfBat(a.id):perfPit(a.id);const rb=b.kind==="bat"?perfBat(b.id):perfPit(b.id);return rb-ra;});
   fas.forEach(p=>{
     const perf=p.kind==="bat"?perfBat(p.id):perfPit(p.id);
     const cands=teams.filter(tm=>p.kind==="bat"?tm.batterIds.length<cfg.battersPerTeam+2:tm.pitcherIds.length<cfg.pitchersPerTeam+2);
     if(!cands.length)return;
-    // 成績不振(平均以下)の選手は買い手がつきにくい→浪人(翌年も無所属)の可能性
     const desirable = p.kind==="bat"? perf>=85 : perf>=95;
     if(!desirable && rnd()<0.45){
-      // 高齢 or すでに浪人経験ありなら引退、若手のみ来季持ち越し（1回だけ）
       if(p.age>=32 || p.wandered){
         p.status="retired";const base=p.kind==="bat"?career.bat[p.id]:career.pit[p.id];const merged=mergeInit(p,base);hall.push({id:p.id,name:p.name,kind:p.kind,role:p.role,age:p.age,career:merged});
         news.retire.push(`${p.name}（${p.age}歳）契約決まらず引退`);
@@ -729,18 +722,31 @@ function processOffseason(state,season,draftPicks){const {teams,pool,career,hall
       return;
     }
     p.wandered=false;
-    // 好成績選手ほど強豪が競り勝つ：魅力度(勝率)で重み付け抽選。不振選手は弱いチーム優先
+    // FA目玉選手が他チームへ移籍した場合、元チームへ人的補償を提供（30%の確率）
+    const prevTeamEntry=faDeclaredPlayers.find(e=>e.p.id===p.id);
     let pool2;
     if(desirable){
-      pool2=cands.map(tm=>({tm,w:Math.pow(teamStrength[tm.id]+0.3, 2)})); // 強豪ほど重い
+      pool2=cands.map(tm=>({tm,w:Math.pow(teamStrength[tm.id]+0.3, 2)}));
     } else {
-      pool2=cands.map(tm=>({tm,w:Math.pow(1.3-teamStrength[tm.id], 2)})); // 弱いチームが拾う
+      pool2=cands.map(tm=>({tm,w:Math.pow(1.3-teamStrength[tm.id], 2)}));
     }
     const total=pool2.reduce((a,b)=>a+b.w,0);let r=rnd()*total;let dest=pool2[0].tm;
     for(const c of pool2){ r-=c.w; if(r<=0){dest=c.tm;break;} }
     addToTeam(dest,p);p.status="active";p.teamId=dest.id;p.yearsOnTeam=0;p.order=0;
     if(p.kind==="pit"&&p.role==="SP")p.rotation=Math.min(6,dest.pitcherIds.filter(id=>pool[id]?.role==="SP").length);
-    if(news.fa.length<50)news.fa.push(`→ ${p.name}（${p.kind==="bat"?"野手":"投手"}）${dest.name}と契約${desirable?" ★目玉":""}`);
+    // 人的補償：移籍先が元チームに控え選手を1人提供（desirable FA×他チーム移籍×30%）
+    if(desirable&&prevTeamEntry&&dest.id!==prevTeamEntry.prevTeamId&&rnd()<0.30){
+      const prevTm=teams.find(t=>t.id===prevTeamEntry.prevTeamId);
+      if(prevTm){
+        const compCands=(p.kind==="bat"?dest.batterIds:dest.pitcherIds).map(id=>pool[id]).filter(q=>q&&q.status==="active"&&!q.foreign&&q.yearsOnTeam>=1&&q.farm);
+        if(compCands.length){
+          const comp=compCands[Math.floor(rnd()*compCands.length)];
+          removeFromTeam(teams,comp);addToTeam(prevTm,comp);comp.teamId=prevTm.id;comp.yearsOnTeam=0;
+          news.fa.push(`★人的補償：${p.name}移籍に伴い${comp.name}が${prevTm.name}へ`);
+        }
+      }
+    }
+    if(news.fa.length<60)news.fa.push(`→ ${p.name}（${p.kind==="bat"?"野手":"投手"}）${dest.name}と契約${desirable?" ★目玉":""}`);
   });
 
   // トレード：球団間で選手を交換（NPB年15-30件）。控え〜準主力を1対1で交換
@@ -953,6 +959,10 @@ export default function App(){
   const [qualPit,setQualPit]=useState(true);
   const [statTeam,setStatTeam]=useState("");
   const [statLeague,setStatLeague]=useState("");
+  const [teamViewSel,setTeamViewSel]=useState("");
+  const [teamBatSort,setTeamBatSort]=useState({key:"OPS",dir:-1});
+  const [teamPitSort,setTeamPitSort]=useState({key:"ERA",dir:1});
+  const [selectedGame,setSelectedGame]=useState(null);
 
   useEffect(()=>{saveState(state,year);},[state,year]);
   const cloneState=(s)=>JSON.parse(JSON.stringify(s));
@@ -1462,69 +1472,81 @@ export default function App(){
         })()}
         {statTab==="team" && (()=>{
           if(!result)return<div style={S.note}>シーズンを実行してください。</div>;
-          const lnC=state.config?.leagueNameC||LEAGUE_NAMES.central;const lnP=state.config?.leagueNameP||LEAGUE_NAMES.pacific;
-          const allTeamsWithLeague=[...new Set(battingStats.map(s=>s.team))].map(tn=>({tn,league:battingStats.find(s=>s.team===tn)?.league||""}));
-          const teamList=statLeague?allTeamsWithLeague.filter(x=>x.league===statLeague).map(x=>x.tn):allTeamsWithLeague.map(x=>x.tn);
+          const allTeamNames=[...new Set(battingStats.map(s=>s.team))].sort();
+          const tn=teamViewSel||allTeamNames[0]||"";
+          const bRows=battingStats.filter(s=>s.team===tn);
+          const pRows=pitchingStats.filter(s=>s.team===tn);
+          const bColsD=[["選手","name"],["G","games"],["PA","PA"],["HR","HR"],["RBI","RBI"],["SB","SB"],["AVG","AVG"],["OBP","OBP"],["SLG","SLG"],["OPS","OPS"]];
+          const pColsD=[["選手","name"],["役割","role"],["G","G"],["W","W"],["L","L"],["SV","SV"],["IP","IP"],["SO","SO"],["ERA","ERA"],["WHIP","WHIP"]];
+          const bAsc=[];const pAsc=["ERA","WHIP"];
+          const sortedB=bRows.slice().sort((a,b)=>teamBatSort.dir*(typeof a[teamBatSort.key]==="number"?b[teamBatSort.key]-a[teamBatSort.key]:0));
+          const sortedP=pRows.slice().sort((a,b)=>teamPitSort.dir*(typeof a[teamPitSort.key]==="number"?b[teamPitSort.key]-a[teamPitSort.key]:0));
+          const totB=bRows.reduce((acc,s)=>({PA:acc.PA+s.PA,AB:acc.AB+s.AB,H:acc.H+s.H,_2B:acc._2B+s._2B,_3B:acc._3B+s._3B,HR:acc.HR+s.HR,RBI:acc.RBI+s.RBI,SB:acc.SB+s.SB,BB:acc.BB+s.BB,HBP:acc.HBP+(s.HBP||0),SO:acc.SO+s.SO}),{PA:0,AB:0,H:0,_2B:0,_3B:0,HR:0,RBI:0,SB:0,BB:0,HBP:0,SO:0});
+          const tAVG=totB.AB?totB.H/totB.AB:0;const tOBP=(totB.AB+totB.BB+totB.HBP)?(totB.H+totB.BB+totB.HBP)/(totB.AB+totB.BB+totB.HBP):0;
+          const tSLG=totB.AB?((totB.H-totB._2B-totB._3B-totB.HR)+2*totB._2B+3*totB._3B+4*totB.HR)/totB.AB:0;
+          const totP=pRows.reduce((acc,s)=>({IP:acc.IP+s.IP,ER:acc.ER+(s.ER||0),H:acc.H+(s.H||0),BB:acc.BB+s.BB,SO:acc.SO+s.SO,W:acc.W+s.W,L:acc.L+s.L,SV:acc.SV+s.SV}),{IP:0,ER:0,H:0,BB:0,SO:0,W:0,L:0,SV:0});
+          const tERA=totP.IP?totP.ER*9/totP.IP:0;const tWHIP=totP.IP?(totP.BB+totP.H)/totP.IP:0;const tK9=totP.IP?totP.SO*9/totP.IP:0;
+          // 対戦成績
+          const h2h={};allTeamNames.forEach(t=>{if(t!==tn)h2h[t]={W:0,L:0,D:0};});
+          result.gameLog.forEach(g=>{if(g.home===tn&&h2h[g.away]){if(g.winner===tn)h2h[g.away].W++;else if(g.winner==="引き分け")h2h[g.away].D++;else h2h[g.away].L++;}if(g.away===tn&&h2h[g.home]){if(g.winner===tn)h2h[g.home].W++;else if(g.winner==="引き分け")h2h[g.home].D++;else h2h[g.home].L++;}});
+          const thS=(key,asc)=>({cursor:"pointer",userSelect:"none",whiteSpace:"nowrap",color:(teamBatSort.key===key||teamPitSort.key===key)?accent:undefined});
+          const arrB=(key)=>teamBatSort.key===key?(teamBatSort.dir===-1?"▼":"▲"):"";
+          const arrP=(key)=>teamPitSort.key===key?(teamPitSort.dir===-1?"▼":"▲"):"";
           return(<div>
-            <div style={{display:"flex",gap:4,marginBottom:12}}>
-              {[["","両リーグ"],["central",lnC],["pacific",lnP]].map(([v,l])=><button key={v} style={statLeague===v?S.statTabA:S.statTab} onClick={()=>setStatLeague(v)}>{l}</button>)}
+            <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:14,flexWrap:"wrap"}}>
+              <select style={{...S.numIn,width:"auto",fontSize:14}} value={tn} onChange={e=>setTeamViewSel(e.target.value)}>
+                {allTeamNames.map(t=><option key={t} value={t}>{t}</option>)}
+              </select>
             </div>
-            {teamList.map(tn=>{
-            const bRows=battingStats.filter(s=>s.team===tn);
-            const pRows=pitchingStats.filter(s=>s.team===tn);
-            const totB=bRows.reduce((acc,s)=>({PA:acc.PA+s.PA,AB:acc.AB+s.AB,H:acc.H+s.H,_2B:acc._2B+s._2B,_3B:acc._3B+s._3B,HR:acc.HR+s.HR,RBI:acc.RBI+s.RBI,SB:acc.SB+s.SB,BB:acc.BB+s.BB,HBP:acc.HBP+(s.HBP||0),SO:acc.SO+s.SO}),{PA:0,AB:0,H:0,_2B:0,_3B:0,HR:0,RBI:0,SB:0,BB:0,HBP:0,SO:0});
-            const tAVG=totB.AB?totB.H/totB.AB:0;const tOBP=(totB.AB+totB.BB+totB.HBP)?((totB.H+totB.BB+totB.HBP)/(totB.AB+totB.BB+totB.HBP)):0;
-            const tSLG=totB.AB?((totB.H-totB._2B-totB._3B-totB.HR)+2*totB._2B+3*totB._3B+4*totB.HR)/totB.AB:0;
-            const totP=pRows.reduce((acc,s)=>({IP:acc.IP+s.IP,ER:acc.ER+(s.ER||0),H:acc.H+(s.H||0),BB:acc.BB+s.BB,SO:acc.SO+s.SO,W:acc.W+s.W,L:acc.L+s.L,SV:acc.SV+s.SV}),{IP:0,ER:0,H:0,BB:0,SO:0,W:0,L:0,SV:0});
-            const tERA=totP.IP?totP.ER*9/totP.IP:0;const tWHIP=totP.IP?(totP.BB+totP.H)/totP.IP:0;const tK9=totP.IP?totP.SO*9/totP.IP:0;
-            return(<div key={tn} style={{borderBottom:`1px solid ${line}`,paddingBottom:14,marginBottom:14}}>
-              <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:20,color:accent,letterSpacing:2,marginBottom:8}}>{tn}</div>
-              <div style={{display:"flex",gap:24,flexWrap:"wrap",marginBottom:10}}>
-                <div>
-                  <div style={{fontSize:11,color:"#7a8a7a",marginBottom:4}}>チーム打撃</div>
-                  <div style={{fontFamily:"'Roboto Mono',monospace",fontSize:12,color:"#c0c8c0"}}>
-                    {totB.PA}PA {totB.HR}HR {totB.RBI}打点 {totB.SB}盗塁 /{" "}
-                    打率<span style={{color:accent}}>{f3(tAVG)}</span>{" "}
-                    出塁<span style={{color:accent}}>{f3(tOBP)}</span>{" "}
-                    長打<span style={{color:accent}}>{f3(tSLG)}</span>{" "}
-                    OPS<span style={{color:accent}}>{f3(tOBP+tSLG)}</span>
-                  </div>
-                </div>
-                <div>
-                  <div style={{fontSize:11,color:"#7a8a7a",marginBottom:4}}>チーム投手</div>
-                  <div style={{fontFamily:"'Roboto Mono',monospace",fontSize:12,color:"#c0c8c0"}}>
-                    {totP.W}勝{totP.L}敗{totP.SV}S {totP.IP.toFixed(1)}IP /{" "}
-                    防御率<span style={{color:accent}}>{f2(tERA)}</span>{" "}
-                    WHIP<span style={{color:accent}}>{f2(tWHIP)}</span>{" "}
-                    K/9<span style={{color:accent}}>{f2(tK9)}</span>
-                  </div>
-                </div>
+            <div style={{display:"flex",gap:20,flexWrap:"wrap",marginBottom:10}}>
+              <div style={{fontFamily:"'Roboto Mono',monospace",fontSize:12,color:"#c0c8c0"}}>
+                <span style={{fontSize:11,color:"#7a8a7a",marginRight:6}}>チーム打撃</span>
+                {totB.PA}PA {totB.HR}HR {totB.RBI}打点 {totB.SB}盗塁 /{" "}
+                打率<span style={{color:accent}}>{f3(tAVG)}</span>{" "}
+                OPS<span style={{color:accent}}>{f3(tOBP+tSLG)}</span>
               </div>
-              <div style={{display:"flex",gap:20,flexWrap:"wrap"}}>
-                <div style={S.scrollX}>
-                  <div style={{fontSize:11,color:"#7a8a7a",marginBottom:4}}>打者成績（規定外含む）</div>
-                  <table style={S.statTable}><tbody>
-                    <tr style={S.th}>{["選手","G","PA","HR","RBI","SB","AVG","OBP","SLG","OPS"].map(h=><td key={h} style={h==="選手"?S.tl:{}}>{h}</td>)}</tr>
-                    {bRows.slice().sort((a,b)=>b.OPS-a.OPS).map((s,i)=><tr key={s.id} style={i%2?S.tr2:S.tr}>
-                      <td style={S.tl}>{s.name}</td><td>{s.games}</td><td>{s.PA}</td><td>{s.HR}</td><td>{s.RBI}</td><td>{s.SB}</td>
-                      <td>{f3(s.AVG)}</td><td>{f3(s.OBP)}</td><td>{f3(s.SLG)}</td><td>{f3(s.OPS)}</td>
-                    </tr>)}
-                  </tbody></table>
-                </div>
-                <div style={S.scrollX}>
-                  <div style={{fontSize:11,color:"#7a8a7a",marginBottom:4}}>投手成績</div>
-                  <table style={S.statTable}><tbody>
-                    <tr style={S.th}>{["選手","役割","G","W","L","SV","IP","SO","ERA","WHIP"].map(h=><td key={h} style={h==="選手"?S.tl:{}}>{h}</td>)}</tr>
-                    {pRows.slice().sort((a,b)=>a.ERA-b.ERA).map((s,i)=><tr key={s.id} style={i%2?S.tr2:S.tr}>
-                      <td style={S.tl}>{s.name}</td><td>{s.role==="SP"?"先発":"救援"}</td>
-                      <td>{s.G}</td><td>{s.W}</td><td>{s.L}</td><td>{s.SV}</td>
-                      <td>{s.IP.toFixed(1)}</td><td>{s.SO}</td><td>{f2(s.ERA)}</td><td>{f2(s.WHIP)}</td>
-                    </tr>)}
-                  </tbody></table>
-                </div>
+              <div style={{fontFamily:"'Roboto Mono',monospace",fontSize:12,color:"#c0c8c0"}}>
+                <span style={{fontSize:11,color:"#7a8a7a",marginRight:6}}>チーム投手</span>
+                {totP.W}勝{totP.L}敗{totP.SV}S /{" "}
+                防御率<span style={{color:accent}}>{f2(tERA)}</span>{" "}
+                WHIP<span style={{color:accent}}>{f2(tWHIP)}</span>
               </div>
-            </div>);
-          })}</div>);
+            </div>
+            <div style={{display:"flex",gap:20,flexWrap:"wrap",marginBottom:14}}>
+              <div style={S.scrollX}>
+                <div style={{fontSize:11,color:"#7a8a7a",marginBottom:4}}>打者成績</div>
+                <table style={S.statTable}><tbody>
+                  <tr style={S.th}>{bColsD.map(([h,k],i)=><td key={k} style={i===0?S.tl:thS(k)} onClick={i>0?()=>setTeamBatSort(s=>({key:k,dir:s.key===k?-s.dir:-1})):undefined}>{h}{i>0?arrB(k):""}</td>)}</tr>
+                  {sortedB.map((s,i)=><tr key={s.id||i} style={i%2?S.tr2:S.tr}>
+                    <td style={S.tl}>{s.name}</td><td>{s.games}</td><td>{s.PA}</td>
+                    <td style={teamBatSort.key==="HR"?S.hl:{}}>{s.HR}</td><td>{s.RBI}</td><td>{s.SB}</td>
+                    <td style={teamBatSort.key==="AVG"?S.hl:{}}>{f3(s.AVG)}</td><td>{f3(s.OBP)}</td><td>{f3(s.SLG)}</td>
+                    <td style={teamBatSort.key==="OPS"?S.hl:{}}>{f3(s.OPS)}</td>
+                  </tr>)}
+                </tbody></table>
+              </div>
+              <div style={S.scrollX}>
+                <div style={{fontSize:11,color:"#7a8a7a",marginBottom:4}}>投手成績</div>
+                <table style={S.statTable}><tbody>
+                  <tr style={S.th}>{pColsD.map(([h,k],i)=><td key={k} style={i===0?S.tl:thS(k)} onClick={i>1?()=>setTeamPitSort(s=>({key:k,dir:s.key===k?-s.dir:pAsc.includes(k)?1:-1})):undefined}>{h}{i>1?arrP(k):""}</td>)}</tr>
+                  {sortedP.map((s,i)=><tr key={s.id||i} style={i%2?S.tr2:S.tr}>
+                    <td style={S.tl}>{s.name}</td><td>{s.role==="SP"?"先発":"救援"}</td>
+                    <td>{s.G}</td><td style={teamPitSort.key==="W"?S.hl:{}}>{s.W}</td><td>{s.L}</td><td>{s.SV}</td>
+                    <td>{s.IP.toFixed(1)}</td><td>{s.SO}</td>
+                    <td style={teamPitSort.key==="ERA"?S.hl:{}}>{f2(s.ERA)}</td><td>{f2(s.WHIP)}</td>
+                  </tr>)}
+                </tbody></table>
+              </div>
+            </div>
+            <div style={{fontSize:11,color:"#7a8a7a",marginBottom:6}}>対戦成績</div>
+            <div style={S.scrollX}><table style={S.statTable}><tbody>
+              <tr style={S.th}><td style={S.tl}>相手</td><td>勝</td><td>敗</td><td>分</td><td>勝率</td></tr>
+              {Object.entries(h2h).sort((a,b)=>b[1].W-a[1].W).map(([vs,r],i)=>{const tot=r.W+r.L+r.D;return(<tr key={vs} style={i%2?S.tr2:S.tr}>
+                <td style={S.tl}>{vs}</td><td style={{color:r.W>r.L?green:undefined}}>{r.W}</td><td>{r.L}</td><td>{r.D||""}</td>
+                <td style={{fontFamily:"'Roboto Mono',monospace"}}>{tot?f3(r.W/tot):"-"}</td>
+              </tr>);})}
+            </tbody></table></div>
+          </div>);
         })()}
         {statTab==="seasonNews" && (()=>{
           const sn=result.seasonNews||[];
@@ -1546,12 +1568,39 @@ export default function App(){
         {statTab==="log" && (()=>{
           const logTeams=["全試合",...new Set(result.gameLog.flatMap(g=>[g.home,g.away]))].sort();
           const filteredLog=result.gameLog.filter(g=>!logFilter||logFilter==="全試合"||g.home===logFilter||g.away===logFilter);
+          const sg=selectedGame;
+          const innings9=(arr)=>arr?arr.slice(0,9):[0,0,0,0,0,0,0,0,0];
           return(<div>
-            <select style={{...S.numIn,width:"auto",marginBottom:8}} value={logFilter||"全試合"} onChange={e=>setLogFilter(e.target.value==="全試合"?"":e.target.value)}>
+            <select style={{...S.numIn,width:"auto",marginBottom:8}} value={logFilter||"全試合"} onChange={e=>{setLogFilter(e.target.value==="全試合"?"":e.target.value);setSelectedGame(null);}}>
               {logTeams.map(t=><option key={t} value={t}>{t}</option>)}
             </select>
             <span style={{fontSize:11,color:"#5a7a5a",marginLeft:8}}>{filteredLog.length}試合</span>
-            <div style={S.logWrap}>{filteredLog.map((g,i)=>(<div key={i} style={S.logRow}><span style={S.logNo}>#{g.gameNo}</span><span style={{...S.logTeam,fontWeight:g.winner===g.away?700:400,color:g.winner===g.away?accent:"#aaa"}}>{g.away}</span><span style={S.logScore}>{g.awayRuns} - {g.homeRuns}</span><span style={{...S.logTeam,fontWeight:g.winner===g.home?700:400,color:g.winner===g.home?accent:"#aaa"}}>{g.home}</span></div>))}</div>
+            {sg&&<div style={{background:"#0f1a14",border:`1px solid ${accent}`,borderRadius:4,padding:"10px 14px",marginTop:8,marginBottom:4}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                <span style={{fontSize:11,color:"#7a8a7a"}}>#{sg.gameNo} スコアボード</span>
+                <button style={{background:"transparent",color:"#888",border:"none",cursor:"pointer",fontSize:16}} onClick={()=>setSelectedGame(null)}>✕</button>
+              </div>
+              <div style={S.scrollX}><table style={{...S.statTable,borderCollapse:"collapse",fontFamily:"'Roboto Mono',monospace",fontSize:12}}><tbody>
+                <tr style={S.th}><td style={{...S.tl,minWidth:80}}></td>{[1,2,3,4,5,6,7,8,9].map(n=><td key={n} style={{textAlign:"center",width:28}}>{n}</td>)}<td style={{textAlign:"center",width:36,color:accent}}>計</td></tr>
+                <tr style={{...S.tr,fontWeight:g=>g.winner===sg.away?700:400}}>
+                  <td style={{...S.tl,color:sg.winner===sg.away?accent:"#d8e0d8",fontWeight:sg.winner===sg.away?700:400}}>{sg.away}</td>
+                  {innings9(sg.ai).map((r,i)=><td key={i} style={{textAlign:"center",color:r>0?"#d8e0d8":"#555"}}>{r}</td>)}
+                  <td style={{textAlign:"center",color:accent,fontWeight:700}}>{sg.awayRuns}</td>
+                </tr>
+                <tr style={S.tr2}>
+                  <td style={{...S.tl,color:sg.winner===sg.home?accent:"#d8e0d8",fontWeight:sg.winner===sg.home?700:400}}>{sg.home}</td>
+                  {innings9(sg.hi).map((r,i)=><td key={i} style={{textAlign:"center",color:r>0?"#d8e0d8":"#555"}}>{r}</td>)}
+                  <td style={{textAlign:"center",color:accent,fontWeight:700}}>{sg.homeRuns}</td>
+                </tr>
+              </tbody></table></div>
+              {sg.winner==="引き分け"&&<div style={{fontSize:11,color:"#7a8a7a",marginTop:4}}>引き分け（延長12回）</div>}
+            </div>}
+            <div style={S.logWrap}>{filteredLog.map((g,i)=>(<div key={i} style={{...S.logRow,cursor:"pointer",background:sg?.gameNo===g.gameNo?"#1a2a20":undefined}} onClick={()=>setSelectedGame(sg?.gameNo===g.gameNo?null:g)}>
+              <span style={S.logNo}>#{g.gameNo}</span>
+              <span style={{...S.logTeam,fontWeight:g.winner===g.away?700:400,color:g.winner===g.away?accent:"#aaa"}}>{g.away}</span>
+              <span style={S.logScore}>{g.awayRuns} - {g.homeRuns}</span>
+              <span style={{...S.logTeam,fontWeight:g.winner===g.home?700:400,color:g.winner===g.home?accent:"#aaa"}}>{g.home}</span>
+            </div>))}</div>
           </div>);
         })()}
         {statTab==="history" && (<div>
