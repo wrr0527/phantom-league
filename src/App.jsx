@@ -475,7 +475,7 @@ function playCS(sorted,teams,pool){
 // ・スタメンも不振なら降格候補に含める
 // ・能力が高いほど降格閾値が厳しくなる（簡単には落とされない）
 // ・2軍から戻る際は order/rotation を保持したまま farm だけ解除
-function midSeasonSwap(teams,pool,batStat,pitStat){
+function midSeasonSwap(teams,pool,batStat,pitStat,seasonNews){
   teams.forEach(tm=>{
     // ── 野手 ───────────────────────────────────────────────
     const batAbil=b=>(b.contact+b.power+b.eye+b.speed)/4;
@@ -504,8 +504,9 @@ function midSeasonSwap(teams,pool,batStat,pitStat){
       const gap=batAbil(down)-batAbil(up);
       const prob=gap>25?0.20:gap>10?0.45:0.65;
       if(rnd()<prob){
-        down.farm=true;  // order は保持：戻ってきたとき元の打順に戻る
+        down.farm=true;
         up.farm=false;
+        if(seasonNews){seasonNews.push({type:"swap",text:`${down.name}（${down.kind==="bat"?"打":"投"}）2軍降格 → ${up.name} 昇格【${down.teamId!=null?teams.find(t=>t.id===down.teamId)?.name||"":""  }】`});}
       }
     }
 
@@ -529,9 +530,10 @@ function midSeasonSwap(teams,pool,batStat,pitStat){
       const prob=gap>25?0.20:gap>10?0.45:0.65;
       if(rnd()<prob){
         down.farm=true;
-        if(down.rotation>=1&&down.rotation<=ROTATION_SIZE) down.rotation=0; // 先発はローテ消去
+        if(down.rotation>=1&&down.rotation<=ROTATION_SIZE) down.rotation=0;
         up.farm=false;
-        if(up.rotation===0) up.rotation=ROTATION_RP_MIN; // 救援昇格はローテ先頭に
+        if(up.rotation===0) up.rotation=ROTATION_RP_MIN;
+        if(seasonNews){seasonNews.push({type:"swap",text:`${down.name}（投）2軍降格 → ${up.name} 昇格【${teams.find(t=>t.id===down.teamId)?.name||""}】`});}
       }
     }
   });
@@ -560,6 +562,7 @@ function midSeasonSwap(teams,pool,batStat,pitStat){
       Math.abs(perfScore(a)-perfScore(p1))-Math.abs(perfScore(b)-perfScore(p1))
     )[0];
     if(!p2||Math.abs(perfScore(p1)-perfScore(p2))>35) continue;
+    const t1name=t1.name,t2name=t2.name;
     p1.teamId=t2.id; p2.teamId=t1.id; p1.yearsOnTeam=0; p2.yearsOnTeam=0;
     t1.batterIds=t1.batterIds.filter(id=>id!==p1.id);
     t1.pitcherIds=t1.pitcherIds.filter(id=>id!==p1.id);
@@ -567,6 +570,7 @@ function midSeasonSwap(teams,pool,batStat,pitStat){
     t2.pitcherIds=t2.pitcherIds.filter(id=>id!==p2.id);
     if(p1.kind==="bat") t2.batterIds.push(p1.id); else t2.pitcherIds.push(p1.id);
     if(p2.kind==="bat") t1.batterIds.push(p2.id); else t1.pitcherIds.push(p2.id);
+    if(seasonNews){seasonNews.push({type:"trade",text:`シーズン中トレード：${p1.name}（${t1name}）⇔ ${p2.name}（${t2name}）`});}
   }
 }
 
@@ -595,14 +599,16 @@ function rollForm(){
 }
 
 function simulateSeason(teams,pool){const batStat={},pitStat={};
-  teams.forEach(tm=>{tm.batterIds.forEach(id=>{const b=pool[id];batStat[id]={id,name:b.name,team:tm.name,teamId:tm.id,age:b.age,games:0,maxGames:rollInjury(),form:rollForm(),PA:0,AB:0,H:0,_2B:0,_3B:0,HR:0,BB:0,HBP:0,SO:0,RBI:0,R:0,SB:0};});
-    tm.pitcherIds.forEach(id=>{const p=pool[id];let inj=1;const r=rnd();if(r<0.12)inj=0.5;else if(r<0.2)inj=0.75;const baseMaxG=p.role==="SP"?30:50+Math.floor(rnd()*25);pitStat[id]={id,name:p.name,team:tm.name,teamId:tm.id,age:p.age,role:p.role,IP:0,H:0,HR:0,BB:0,SO:0,ER:0,W:0,L:0,SV:0,G:0,maxG:Math.floor(baseMaxG*inj),injuryFactor:inj,form:rollForm()};});});
+  const seasonNews=[];
+  teams.forEach(tm=>{
+    tm.batterIds.forEach(id=>{const b=pool[id];const maxG=rollInjury();if(maxG<GAMES*0.7){seasonNews.push({type:"injury",text:`【開幕前離脱】${b.name}（${tm.name}）故障 ※出場上限${maxG}試合`});}batStat[id]={id,name:b.name,team:tm.name,teamId:tm.id,age:b.age,games:0,maxGames:maxG,form:rollForm(),PA:0,AB:0,H:0,_2B:0,_3B:0,HR:0,BB:0,HBP:0,SO:0,RBI:0,R:0,SB:0};});
+    tm.pitcherIds.forEach(id=>{const p=pool[id];let inj=1;const r=rnd();if(r<0.12)inj=0.5;else if(r<0.2)inj=0.75;if(inj<1){seasonNews.push({type:"injury",text:`【開幕前離脱】${p.name}（${tm.name}）故障 ※登板数${Math.round(inj*100)}%制限`});}const baseMaxG=p.role==="SP"?30:50+Math.floor(rnd()*25);pitStat[id]={id,name:p.name,team:tm.name,teamId:tm.id,age:p.age,role:p.role,IP:0,H:0,HR:0,BB:0,SO:0,ER:0,W:0,L:0,SV:0,G:0,maxG:Math.floor(baseMaxG*inj),injuryFactor:inj,form:rollForm()};});
+  });
   const record={};teams.forEach(tm=>record[tm.id]={name:tm.name,league:tm.league,W:0,L:0,D:0,RS:0,RA:0,id:tm.id});
   const schedule=buildSchedule(teams);
-  // 約6試合(1週間)ごとに入れ替え評価。lastSwapGame で重複呼び出しを防ぐ
   let lastSwapGame=0;
   const gameLog=[];schedule.forEach(m=>{
-    if(m.gameNo>lastSwapGame+7){midSeasonSwap(teams,pool,batStat,pitStat);lastSwapGame=m.gameNo;}
+    if(m.gameNo>lastSwapGame+7){midSeasonSwap(teams,pool,batStat,pitStat,seasonNews);lastSwapGame=m.gameNo;}
     const home=teams.find(t=>t.id===m.home),away=teams.find(t=>t.id===m.away);
     const hRes=teamGame(home,away,pool,batStat,pitStat,m.gameNo),aRes=teamGame(away,home,pool,batStat,pitStat,m.gameNo);
     let hR=hRes.runs,aR=aRes.runs;
@@ -630,7 +636,7 @@ function simulateSeason(teams,pool){const batStat={},pitStat={};
   const champC=csC?csC.champion:cl[0];const champP=csP?csP.champion:pl[0];
   let japanSeries=null;
   if(champC&&champP){japanSeries=playJapanSeries(champC,champP,teams,pool);japanSeries.centralChamp=champC.name;japanSeries.pacificChamp=champP.name;}
-  return {batStat,pitStat,record,gameLog,japanSeries,cs:{central:csC,pacific:csP}};}
+  return {batStat,pitStat,record,gameLog,japanSeries,cs:{central:csC,pacific:csP},seasonNews};}
 
 function ageMul(age){return age<=27?clamp(0.78+(age-18)*0.0244,0.78,1.0):clamp(1.0-(age-27)*0.022,0.5,1.0);}
 function agePlayer(p){p.age++;const fs=p.kind==="bat"?["contact","power","eye","speed"]:["stuff","control","stamina"];const m=ageMul(p.age)/ageMul(p.age-1);
@@ -1329,7 +1335,7 @@ export default function App(){
           <span>{START_YEAR+year-1}年（第{year}シーズン）の結果です。納得いくまで<b style={{color:accent}}>「再実行」</b>でやり直せます。確定するには<b style={{color:green}}>「オフへ進む」</b>。</span>
           <span style={{display:"flex",gap:8}}><button style={S.rerunBtnSm} onClick={runOne}>↻ 再実行</button><button style={S.proceedBtnSm} onClick={proceedToDraft}>オフへ進む ▶</button></span>
         </div>}
-        <div style={S.statTabs}>{[["standings","順位表"],["batting","打撃(今季)"],["pitching","投手(今季)"],["team","チーム別"],["careerBat","通算打撃"],["careerPit","通算投手"],["hallBat","殿堂(打者)"],["hallPit","殿堂(投手)"],["news","オフ移籍"],["log","全試合"],["history","シーズン履歴"]].map(([k,l])=>(<button key={k} onClick={()=>setStatTab(k)} style={statTab===k?S.statTabA:S.statTab}>{l}</button>))}</div>
+        <div style={S.statTabs}>{[["standings","順位表"],["batting","打撃(今季)"],["pitching","投手(今季)"],["team","チーム別"],["careerBat","通算打撃"],["careerPit","通算投手"],["hallBat","殿堂(打者)"],["hallPit","殿堂(投手)"],["seasonNews","シーズン中"],["news","オフ移籍"],["log","全試合"],["history","シーズン履歴"]].map(([k,l])=>(<button key={k} onClick={()=>setStatTab(k)} style={statTab===k?S.statTabA:S.statTab}>{l}</button>))}</div>
         {statTab==="standings" && (<div>
           {result.japanSeries && <div style={S.jsBox}>
             <div style={S.jsTitle}>🏆 日本シリーズ</div>
@@ -1519,6 +1525,21 @@ export default function App(){
               </div>
             </div>);
           })}</div>);
+        })()}
+        {statTab==="seasonNews" && (()=>{
+          const sn=result.seasonNews||[];
+          const injuries=sn.filter(e=>e.type==="injury");
+          const swaps=sn.filter(e=>e.type==="swap");
+          const trades=sn.filter(e=>e.type==="trade");
+          const Section=({label,items})=>(<div style={{marginBottom:14}}>
+            <div style={S.newsHead}>{label}（{items.length}）</div>
+            {items.length?items.map((e,i)=><div key={i} style={S.newsRow}>{e.text}</div>):<div style={S.newsRowDim}>なし</div>}
+          </div>);
+          return(<div style={S.newsWrap}>
+            <Section label="◆ 故障・離脱" items={injuries}/>
+            <Section label="◆ シーズン中トレード" items={trades}/>
+            <Section label="◆ 1軍登録変更（降格→昇格）" items={swaps}/>
+          </div>);
         })()}
         {statTab==="news" && news && (<div style={S.newsWrap}>{[["retire","◆ 引退"],["overseas","◆ 海外挑戦"],["return","◆ 国内復帰"],["release","◆ 戦力外（成績準拠）"],["trade","◆ トレード"],["fa","◆ FA・契約"],["draft","◆ ドラフト入団"]].map(([k,l])=>(<div key={k}><div style={S.newsHead}>{l}（{news[k].length}）</div>{news[k].length?news[k].map((t,i)=><div key={i} style={S.newsRow}>{t}</div>):<div style={S.newsRowDim}>なし</div>}</div>))}</div>)}
         {statTab==="news" && !news && <div style={S.note}>まだオフシーズンを消化していません。</div>}
