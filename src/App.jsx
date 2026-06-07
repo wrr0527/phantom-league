@@ -8,6 +8,7 @@ import React, { useState, useMemo, useEffect } from "react";
 // ============================================================
 
 const STORAGE_KEY = "phantom-league-v7"; // 互換のため据え置き（データ構造は同じ）
+const START_YEAR = 2004; // 開幕シーズンの西暦
 const SHEET_URL_KEY = "phantom-league-sheet-url"; // GAS Web AppのURL保存先
 const SCHEMA_VERSION = 11; // 保存データのスキーマ版（改修時のマイグレーション用）
 const ROTATION_SIZE = 6;        // 先発ローテーション人数（中6日想定）
@@ -930,10 +931,15 @@ export default function App(){
 
   // シーズン実行：年は進めない。結果を表示し、何度でも再実行できる
   const runOne=()=>{
-    const r=simulateSeason(state.teams,state.pool);
-    setResult(r);setPendingSeason(r);setNews(null);setTab("results");setStatTab("standings");
-    const url=getSheetUrl();
-    if(url) syncToSheet(url,state,year,r).catch(()=>{});
+    try{
+      const r=simulateSeason(state.teams,state.pool);
+      setResult(r);setPendingSeason(r);setNews(null);setTab("results");setStatTab("standings");
+      const url=getSheetUrl();
+      if(url) syncToSheet(url,state,year,r).catch(()=>{});
+    }catch(e){
+      console.error(e);
+      alert("シミュレーションエラー: "+String(e?.message||e)+"\n\nコンソールを確認してください。");
+    }
   };
   // 結果に納得→ドラフト画面へ進む
   const proceedToDraft=()=>{if(!pendingSeason){alert("先にシーズンを実行してください");return;}const cfg=state.config||DEFAULT_CONFIG;setDraft(genDraftProspects(cfg.draftBat,cfg.draftPit,state.teams.length));setTab("draft");};
@@ -1057,7 +1063,7 @@ export default function App(){
   return (
     <div style={S.page}>
       <style>{CSS}</style>
-      <header style={S.header}><div style={S.logo}>◆ PHANTOM LEAGUE</div><div style={S.sub}>妄想選手名鑑 · {GAMES}試合 · {state.teams.length}球団 · {year-1>=1?`第${year-1}シーズン終了`:"開幕前"}</div></header>
+      <header style={S.header}><div style={S.logo}>◆ PHANTOM LEAGUE</div><div style={S.sub}>妄想選手名鑑 · {GAMES}試合 · {state.teams.length}球団 · {year-1>=1?`${START_YEAR+year-2}年（第${year-1}シーズン終了）`:`${START_YEAR}年開幕前`}</div></header>
       {(()=>{
         // 全チームのバリデーション（打順・守備位置・人数）
         window._teamErrs=state.teams.map(t=>{
@@ -1083,7 +1089,7 @@ export default function App(){
       <nav style={S.nav}>
         <button style={tab==="setup"?S.navBtnA:S.navBtn} onClick={()=>setTab("setup")}>SETUP</button>
         <button style={tab==="results"?S.navBtnA:S.navBtn} onClick={()=>result&&setTab("results")} disabled={!result}>RESULTS</button>
-        <button style={S.runBtn} onClick={runOne} disabled={!!(window._teamErrs&&window._teamErrs.some(e=>!e.ok))} title={window._teamErrs&&window._teamErrs.some(e=>!e.ok)?"チーム編成エラーを修正してください":undefined}>{pendingSeason?"↻ 同じ年を再実行":"▶ シーズン実行"}</button>
+        <button style={S.runBtn} onClick={runOne} disabled={!!(window._teamErrs&&window._teamErrs.some(e=>!e.ok))} title={window._teamErrs&&window._teamErrs.some(e=>!e.ok)?"チーム編成エラーを修正してください":undefined}>{pendingSeason?`↻ ${START_YEAR+year-1}年 再実行`:`▶ ${START_YEAR+year-1}年 シーズン実行`}</button>
         {pendingSeason && <button style={S.proceedBtn} onClick={proceedToDraft}>オフへ進む ▶</button>}
         <button style={S.ioBtn} onClick={()=>{setIoOpen(true);setIoText("");}}>⇩ 取込</button>
         <button style={S.ioBtn} onClick={doExport}>⇧ 書出</button>
@@ -1269,7 +1275,7 @@ export default function App(){
       </div>)}
 
       {tab==="draft" && draft && (<div style={S.panel}>
-        <div style={S.draftHead}>第{year}シーズン ドラフト候補</div>
+        <div style={S.draftHead}>{START_YEAR+year-1}年（第{year}シーズン）ドラフト候補</div>
         <div style={S.note}>空き枠に上から入団。{useRank?"ランク":"数値"}で編集。新人の打順/ローテ/球種は入団後にSETUPで調整できます。</div>
         {state.teams.map((t,ti)=>(<div key={t.id} style={S.draftTeam}><div style={S.draftTeamName}>{t.name}</div><div style={S.scrollX}><table style={S.editTable}><tbody>
           <tr style={S.editHead}><td>新人野手</td><td>ミート</td><td>パワー</td><td>選球</td><td>走力</td></tr>
@@ -1282,7 +1288,7 @@ export default function App(){
 
       {tab==="results" && result && (<div style={S.panel}>
         {pendingSeason && <div style={S.rerunBar}>
-          <span>第{year}シーズンの結果です。納得いくまで<b style={{color:accent}}>「同じ年を再実行」</b>でやり直せます。確定するには<b style={{color:green}}>「オフへ進む」</b>。</span>
+          <span>{START_YEAR+year-1}年（第{year}シーズン）の結果です。納得いくまで<b style={{color:accent}}>「再実行」</b>でやり直せます。確定するには<b style={{color:green}}>「オフへ進む」</b>。</span>
           <span style={{display:"flex",gap:8}}><button style={S.rerunBtnSm} onClick={runOne}>↻ 再実行</button><button style={S.proceedBtnSm} onClick={proceedToDraft}>オフへ進む ▶</button></span>
         </div>}
         <div style={S.statTabs}>{[["standings","順位表"],["batting","打撃(今季)"],["pitching","投手(今季)"],["careerBat","通算打撃"],["careerPit","通算投手"],["hallBat","殿堂(打者)"],["hallPit","殿堂(投手)"],["news","オフ移籍"],["log","全試合"],["history","シーズン履歴"]].map(([k,l])=>(<button key={k} onClick={()=>setStatTab(k)} style={statTab===k?S.statTabA:S.statTab}>{l}</button>))}</div>
@@ -1381,7 +1387,7 @@ export default function App(){
           {(!state.history||state.history.length===0)&&<div style={S.note}>まだシーズン履歴がありません。オフへ進むと記録されます。</div>}
           {(state.history||[]).map(h=>(
             <div key={h.year} style={{borderBottom:`1px solid ${line}`,padding:"14px 0"}}>
-              <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:22,color:accent,letterSpacing:2,marginBottom:8}}>第{h.year}シーズン{h.japanSeries?` — 🏆 ${h.japanSeries.champion} 日本一`:""}</div>
+              <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:22,color:accent,letterSpacing:2,marginBottom:8}}>{START_YEAR+h.year-1}年（第{h.year}シーズン）{h.japanSeries?` — 🏆 ${h.japanSeries.champion} 日本一`:""}</div>
               <div style={{display:"flex",gap:16,flexWrap:"wrap",marginBottom:8}}>
                 {[["central","セントラル"],["pacific","パシフィック"]].map(([lg,label])=>(
                   <div key={lg} style={{minWidth:200}}>
