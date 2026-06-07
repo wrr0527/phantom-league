@@ -652,7 +652,7 @@ function computePitching(stats){return stats.filter(s=>s.IP>0).map(pitchingMetri
 function accumulate(career,season){const bk=["PA","AB","H","_2B","_3B","HR","BB","HBP","SO","RBI","R","SB","games"];const pk=["IP","H","HR","BB","SO","ER","W","L","SV","G"];
   Object.values(season.batStat).forEach(s=>{if(s.PA===0)return;if(!career.bat[s.id])career.bat[s.id]={id:s.id,name:s.name,seasons:0,...emptyCareerBat()};const c=career.bat[s.id];c.seasons++;c.name=s.name;bk.forEach(k=>c[k]+=s[k]);});
   Object.values(season.pitStat).forEach(s=>{if(s.IP===0)return;if(!career.pit[s.id])career.pit[s.id]={id:s.id,name:s.name,role:s.role,seasons:0,...emptyCareerPit()};const c=career.pit[s.id];c.seasons++;pk.forEach(k=>c[k]+=s[k]);});}
-function processOffseason(state,season,draftPicks){const {teams,pool,career,hall}=state;const cfg=state.config||DEFAULT_CONFIG;const news={retire:[],overseas:[],return:[],release:[],trade:[],fa:[],draft:[]};
+function processOffseason(state,season,draftPicks){const {teams,pool,career,hall}=state;const cfg=state.config||DEFAULT_CONFIG;const news={retire:[],overseas:[],return:[],release:[],trade:[],fa:[],foreign:[],draft:[]};
   const batM={};computeBatting(Object.values(season.batStat)).forEach(s=>batM[s.id]=s);const pitM={};computePitching(Object.values(season.pitStat)).forEach(s=>pitM[s.id]=s);
   const perfBat=(id)=>batM[id]?batM[id].wRCp:0;const perfPit=(id)=>pitM[id]?(pitM[id].IP>20?200-pitM[id].FIP*20:60):40;
   // 0. 外国人選手の入れ替え（NPB助っ人は回転が速い：不振なら即解雇、活躍するほどMLB/好条件で流出）
@@ -677,10 +677,10 @@ function processOffseason(state,season,draftPicks){const {teams,pool,career,hall
   teams.forEach(tm=>{
     // 各球団おおむね外国人野手2・投手2を維持するよう新助っ人を補充
     while(tm.batterIds.filter(id=>pool[id]?.foreign).length<3){
-      const b=makeBatter(24+Math.floor(rnd()*6));b.foreign=true;b.name=randForeignName();["contact","power","eye","speed"].forEach(f=>b[f]=clamp(55+Math.round(randn()*14),35,95));b.power=clamp(b.power+8,1,99);b.teamId=tm.id;pool[b.id]=b;tm.batterIds.push(b.id);news.draft.push(`${tm.name} 新助っ人野手 ${b.name}`);
+      const b=makeBatter(24+Math.floor(rnd()*6));b.foreign=true;b.name=randForeignName();["contact","power","eye","speed"].forEach(f=>b[f]=clamp(55+Math.round(randn()*14),35,95));b.power=clamp(b.power+8,1,99);b.teamId=tm.id;pool[b.id]=b;tm.batterIds.push(b.id);news.foreign.push(`${tm.name} 新助っ人野手 ${b.name}`);
     }
     while(tm.pitcherIds.filter(id=>pool[id]?.foreign).length<2){
-      const p=makePitcher(24+Math.floor(rnd()*6),rnd()<0.6?"SP":"RP");p.foreign=true;p.name=randForeignName();["stuff","control","stamina"].forEach(f=>p[f]=clamp(55+Math.round(randn()*14),35,95));p.stuff=clamp(p.stuff+6,1,99);p.teamId=tm.id;pool[p.id]=p;tm.pitcherIds.push(p.id);news.draft.push(`${tm.name} 新助っ人投手 ${p.name}`);
+      const p=makePitcher(24+Math.floor(rnd()*6),rnd()<0.6?"SP":"RP");p.foreign=true;p.name=randForeignName();["stuff","control","stamina"].forEach(f=>p[f]=clamp(55+Math.round(randn()*14),35,95));p.stuff=clamp(p.stuff+6,1,99);p.teamId=tm.id;pool[p.id]=p;tm.pitcherIds.push(p.id);news.foreign.push(`${tm.name} 新助っ人投手 ${p.name}`);
     }
   });
   Object.values(pool).forEach(p=>{if(p.status!=="active"&&p.status!=="overseas")return;const perf=p.kind==="bat"?perfBat(p.id):perfPit(p.id);let prob=0;if(p.age>=RETIRE_AGE)prob=0.18+(p.age-RETIRE_AGE)*0.10;if(p.age>=33&&perf<(p.kind==="bat"?80:90))prob+=0.18;if(p.age>=43)prob=1;
@@ -1563,7 +1563,7 @@ export default function App(){
             <Section label="◆ 1軍登録変更（降格→昇格）" items={swaps}/>
           </div>);
         })()}
-        {statTab==="news" && news && (<div style={S.newsWrap}>{[["retire","◆ 引退"],["overseas","◆ 海外挑戦"],["return","◆ 国内復帰"],["release","◆ 戦力外（成績準拠）"],["trade","◆ トレード"],["fa","◆ FA・契約"],["draft","◆ ドラフト入団"]].map(([k,l])=>(<div key={k}><div style={S.newsHead}>{l}（{news[k].length}）</div>{news[k].length?news[k].map((t,i)=><div key={i} style={S.newsRow}>{t}</div>):<div style={S.newsRowDim}>なし</div>}</div>))}</div>)}
+        {statTab==="news" && news && (<div style={S.newsWrap}>{[["retire","◆ 引退"],["overseas","◆ 海外挑戦"],["return","◆ 国内復帰"],["release","◆ 戦力外（成績準拠）"],["trade","◆ トレード"],["fa","◆ FA・契約"],["foreign","◆ 助っ人入団"],["draft","◆ ドラフト入団"]].map(([k,l])=>(<div key={k}><div style={S.newsHead}>{l}（{news[k].length}）</div>{news[k].length?news[k].map((t,i)=><div key={i} style={S.newsRow}>{t}</div>):<div style={S.newsRowDim}>なし</div>}</div>))}</div>)}
         {statTab==="news" && !news && <div style={S.note}>まだオフシーズンを消化していません。</div>}
         {statTab==="log" && (()=>{
           const logTeams=["全試合",...new Set(result.gameLog.flatMap(g=>[g.home,g.away]))].sort();
