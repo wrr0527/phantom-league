@@ -26,6 +26,8 @@ const CS_S1_WINS = 2; // CSファーストステージ（先に2勝）
 const CS_F_WINS  = 4; // CSファイナルステージ（先に4勝、1位は1勝アドバンテージ）
 const GAMES=143, NUM_TEAMS=12, BATTERS_PER_TEAM=20, PITCHERS_PER_TEAM=16, FA_YEARS=8, RETIRE_AGE=36;
 // NPB準拠の枠
+const QUAL_PA  = Math.floor(GAMES * 3.1); // 規定打席（143×3.1≈443）
+const QUAL_IP  = GAMES;                   // 規定投球回（143）
 const ROSTER_31=31;       // 一軍登録上限（NPB準拠 固定）
 const BENCH_26=26;        // ベンチ入り上限（先発SP5人はオフ扱いで実質26人）
 const FOREIGN_ON_FIELD=5; // 外国人同時出場上限
@@ -150,6 +152,22 @@ const _mkPicker=arr=>{let t=0;const c=arr.map(([n,w])=>(t+=w,[t,n]));return()=>{
 const _pickSurname=_mkPicker(SURNAMES_W);
 const _pickGiven=_mkPicker(GIVEN_W);
 const randName=()=>_pickSurname()+_pickGiven();
+// 外国人選手名生成（米系/スペイン語系/中国系/韓国系をバランスよく）
+const FOREIGN_FIRST_US=["マイケル","ブランドン","クリス","タイラー","ライアン","ジャスティン","ニック","ジョシュ","コーリー","アーロン","トラビス","ダラス","ブレット","トレイ","ゲイリー","ランディ"];
+const FOREIGN_LAST_US=["ジョンソン","スミス","デービス","ウィルソン","アンダーソン","テイラー","マーティン","ジャクソン","ハリス","ホワイト","ミラー","ムーア","トーマス","クラーク","ルイス"];
+const FOREIGN_FIRST_ES=["カルロス","ミゲル","フアン","ホセ","マヌエル","エドウィン","ロベルト","フェリックス","エリック","ラファエル","ルイス","ジオバニー","ビクトル","ネルソン","オルランド"];
+const FOREIGN_LAST_ES=["マルティネス","ロドリゲス","ガルシア","ロペス","ゴンサレス","ペレス","トーレス","フローレス","リベラ","モラレス","エレーラ","メディナ","カストロ","ロメロ","デルガード"];
+const FOREIGN_FIRST_ZH=["偉","浩","明","志","剛","強","建","勇","超","磊","鑫","龍","彬","旭","凱"];
+const FOREIGN_LAST_ZH=["陳","王","李","張","劉","楊","黃","趙","吳","周","徐","孫","朱","馬","林"];
+const FOREIGN_FIRST_KR=["ジュンホ","スンヨプ","チャンホ","ドンヒョン","ジョンソプ","スンファン","ヒョンジン","ジウォン","サンス","ジョンウ","ミンジュン","ジョンギュ","テヒョン","ジョンウォン","ウソク"];
+const FOREIGN_LAST_KR=["パク","イ","キム","チェ","チョン","ユ","ハン","シン","ソン","ヤン","コ","オ","リュ","クォン","アン"];
+function randForeignName(){
+  const r=rnd();
+  if(r<0.30){return FOREIGN_FIRST_US[Math.floor(rnd()*FOREIGN_FIRST_US.length)]+"・"+FOREIGN_LAST_US[Math.floor(rnd()*FOREIGN_LAST_US.length)];}
+  if(r<0.60){return FOREIGN_FIRST_ES[Math.floor(rnd()*FOREIGN_FIRST_ES.length)]+"・"+FOREIGN_LAST_ES[Math.floor(rnd()*FOREIGN_LAST_ES.length)];}
+  if(r<0.80){return FOREIGN_LAST_ZH[Math.floor(rnd()*FOREIGN_LAST_ZH.length)]+FOREIGN_FIRST_ZH[Math.floor(rnd()*FOREIGN_FIRST_ZH.length)];}
+  return FOREIGN_LAST_KR[Math.floor(rnd()*FOREIGN_LAST_KR.length)]+"・"+FOREIGN_FIRST_KR[Math.floor(rnd()*FOREIGN_FIRST_KR.length)];
+}
 // NPB年齢分布（18〜36歳）
 const AGE_W=[[18,3],[19,5],[20,7],[21,9],[22,10],[23,10],[24,9],[25,8],[26,7],[27,6],[28,5],[29,4],[30,4],[31,3],[32,2],[33,2],[34,1],[35,1],[36,1]];
 const _pickAge=_mkPicker(AGE_W);
@@ -209,8 +227,8 @@ function initLeague(){
   });
   // 各球団に外国人を野手2・投手2配置（パワー/球威を少し高めに）
   teams.forEach(tm=>{
-    tm.batterIds.slice(0,3).forEach(id=>{pool[id].foreign=true;pool[id].power=clamp(pool[id].power+8,1,99);});
-    tm.pitcherIds.filter(id=>pool[id].role==="RP").slice(0,2).forEach(id=>{pool[id].foreign=true;pool[id].stuff=clamp(pool[id].stuff+6,1,99);});
+    tm.batterIds.slice(0,3).forEach(id=>{pool[id].foreign=true;pool[id].name=randForeignName();pool[id].power=clamp(pool[id].power+8,1,99);});
+    tm.pitcherIds.filter(id=>pool[id].role==="RP").slice(0,2).forEach(id=>{pool[id].foreign=true;pool[id].name=randForeignName();pool[id].stuff=clamp(pool[id].stuff+6,1,99);});
   });
   assignFarm(teams,pool);
   return {teams,pool};
@@ -657,29 +675,28 @@ function processOffseason(state,season,draftPicks){const {teams,pool,career,hall
   teams.forEach(tm=>{
     // 各球団おおむね外国人野手2・投手2を維持するよう新助っ人を補充
     while(tm.batterIds.filter(id=>pool[id]?.foreign).length<3){
-      const b=makeBatter(24+Math.floor(rnd()*6));b.foreign=true;["contact","power","eye","speed"].forEach(f=>b[f]=clamp(55+Math.round(randn()*14),35,95));b.power=clamp(b.power+8,1,99);b.teamId=tm.id;pool[b.id]=b;tm.batterIds.push(b.id);news.draft.push(`${tm.name} 新助っ人野手 ${b.name}`);
+      const b=makeBatter(24+Math.floor(rnd()*6));b.foreign=true;b.name=randForeignName();["contact","power","eye","speed"].forEach(f=>b[f]=clamp(55+Math.round(randn()*14),35,95));b.power=clamp(b.power+8,1,99);b.teamId=tm.id;pool[b.id]=b;tm.batterIds.push(b.id);news.draft.push(`${tm.name} 新助っ人野手 ${b.name}`);
     }
     while(tm.pitcherIds.filter(id=>pool[id]?.foreign).length<2){
-      const p=makePitcher(24+Math.floor(rnd()*6),rnd()<0.6?"SP":"RP");p.foreign=true;["stuff","control","stamina"].forEach(f=>p[f]=clamp(55+Math.round(randn()*14),35,95));p.stuff=clamp(p.stuff+6,1,99);p.teamId=tm.id;pool[p.id]=p;tm.pitcherIds.push(p.id);news.draft.push(`${tm.name} 新助っ人投手 ${p.name}`);
+      const p=makePitcher(24+Math.floor(rnd()*6),rnd()<0.6?"SP":"RP");p.foreign=true;p.name=randForeignName();["stuff","control","stamina"].forEach(f=>p[f]=clamp(55+Math.round(randn()*14),35,95));p.stuff=clamp(p.stuff+6,1,99);p.teamId=tm.id;pool[p.id]=p;tm.pitcherIds.push(p.id);news.draft.push(`${tm.name} 新助っ人投手 ${p.name}`);
     }
   });
   Object.values(pool).forEach(p=>{if(p.status!=="active"&&p.status!=="overseas")return;const perf=p.kind==="bat"?perfBat(p.id):perfPit(p.id);let prob=0;if(p.age>=RETIRE_AGE)prob=0.18+(p.age-RETIRE_AGE)*0.10;if(p.age>=33&&perf<(p.kind==="bat"?80:90))prob+=0.18;if(p.age>=43)prob=1;
     if(rnd()<prob){p.status="retired";const base=p.kind==="bat"?career.bat[p.id]:career.pit[p.id];const merged=mergeInit(p,base);hall.push({id:p.id,name:p.name,kind:p.kind,role:p.role,age:p.age,career:merged});news.retire.push(`${p.name}（${p.age}歳）引退 ${summ(p,merged)}`);removeFromTeam(teams,p);}});
-  const oc=Object.values(pool).filter(p=>p.status==="active"&&p.age>=25&&p.age<=31&&((p.kind==="bat"&&perfBat(p.id)>125)||(p.kind==="pit"&&perfPit(p.id)>150)));
-  oc.forEach(p=>{if(news.overseas.length<3&&rnd()<0.35){p.status="overseas";p.overseasReturn=2+Math.floor(rnd()*3);removeFromTeam(teams,p);news.overseas.push(`${p.name} 海外挑戦（${p.overseasReturn}年予定）`);}});
+  const oc=Object.values(pool).filter(p=>p.status==="active"&&p.age>=25&&p.age<=31&&((p.kind==="bat"&&perfBat(p.id)>130)||(p.kind==="pit"&&perfPit(p.id)>160)));
+  oc.forEach(p=>{if(news.overseas.length<2&&rnd()<0.15){p.status="overseas";p.overseasReturn=2+Math.floor(rnd()*3);removeFromTeam(teams,p);news.overseas.push(`${p.name} 海外挑戦（${p.overseasReturn}年予定）`);}});
   Object.values(pool).forEach(p=>{if(p.status!=="overseas")return;p.overseasReturn--;if(p.overseasReturn<=0){p.status="fa";news.return.push(`${p.name} 国内復帰`);}});
   teams.forEach(tm=>{const judge=(ids,kind)=>{ids.slice().forEach(id=>{const p=pool[id];if(!p||p.status!=="active")return;const perf=kind==="bat"?perfBat(id):perfPit(id);const played=kind==="bat"?(season.batStat[id]?.PA||0):(season.pitStat[id]?.IP||0);const lowPerf=kind==="bat"?perf<70:perf<55;const thinPlay=kind==="bat"?played<150:played<25;
-    if(p.age>=25&&lowPerf&&thinPlay&&rnd()<0.5){p.status="fa";removeFromTeam(teams,p);news.release.push(`${tm.name} ${p.name}（${p.age}歳）戦力外`);}else if(p.age>=30&&lowPerf&&rnd()<0.3){p.status="fa";removeFromTeam(teams,p);news.release.push(`${tm.name} ${p.name}（${p.age}歳）戦力外`);}});};
+    if(p.age>=25&&lowPerf&&thinPlay&&rnd()<0.30){p.status="fa";removeFromTeam(teams,p);news.release.push(`${tm.name} ${p.name}（${p.age}歳）戦力外`);}else if(p.age>=30&&lowPerf&&rnd()<0.15){p.status="fa";removeFromTeam(teams,p);news.release.push(`${tm.name} ${p.name}（${p.age}歳）戦力外`);}});};
     judge(tm.batterIds,"bat");judge(tm.pitcherIds,"pit");});
-  // FA宣言：有資格者(8年在籍)のうち、好成績の選手が中心に低確率で宣言。年9人前後に制限
+  // FA宣言：有資格者(8年在籍)のうち、好成績の選手が中心に低確率で宣言。年4人前後に制限（NPB水準）
   const faEligible=Object.values(pool).filter(p=>p.status==="active"&&p.yearsOnTeam>=FA_YEARS);
   let faDeclared=0;
   faEligible.forEach(p=>{
-    if(faDeclared>=9)return;
+    if(faDeclared>=4)return;
     const perf=p.kind==="bat"?perfBat(p.id):perfPit(p.id);
     const good=p.kind==="bat"?perf>=95:perf>=105;
-    // 好成績者は35%、並の選手は10%で宣言（資格者が少なめなので率を上げて年9人前後に）
-    const rate=good?0.35:0.10;
+    const rate=good?0.18:0.04;
     if(rnd()<rate){p.status="fa";removeFromTeam(teams,p);news.fa.push(`${p.name} FA宣言`);faDeclared++;}
   });
   // FA・自由契約選手の再契約（争奪戦）。好成績選手ほど強豪が獲得、不振選手は浪人もありうる
@@ -722,7 +739,7 @@ function processOffseason(state,season,draftPicks){const {teams,pool,career,hall
 
   // トレード：球団間で選手を交換（NPB年15-30件）。控え〜準主力を1対1で交換
   const tradePerf=(p)=>{const m=p.kind==="bat"?perfBat(p.id):perfPit(p.id);return m;};
-  let tradeCount=0; const tradeTarget=15+Math.floor(rnd()*12); // 年15-26件
+  let tradeCount=0; const tradeTarget=5+Math.floor(rnd()*6); // 年5-10件（NPB水準）
   let tradeGuard=0;
   while(tradeCount<tradeTarget && tradeGuard<200){
     tradeGuard++;
@@ -926,12 +943,25 @@ export default function App(){
   const [syncing,setSyncing]=useState(false);
   const [batSort,setBatSort]=useState({key:"HR",dir:-1});
   const [pitSort,setPitSort]=useState({key:"W",dir:-1});
+  const [qualBat,setQualBat]=useState(true);
+  const [qualPit,setQualPit]=useState(true);
+  const [statTeam,setStatTeam]=useState("");
 
   useEffect(()=>{saveState(state,year);},[state,year]);
   const cloneState=(s)=>JSON.parse(JSON.stringify(s));
 
   // シーズン実行：年は進めない。結果を表示し、何度でも再実行できる
   const runOne=()=>{
+    // 外国人枠チェック（1軍登録5人以下）
+    const foreignErrors=state.teams.filter(tm=>{
+      const allIds=[...tm.batterIds,...tm.pitcherIds];
+      const activeFor=allIds.filter(id=>state.pool[id]&&state.pool[id].foreign&&!state.pool[id].farm).length;
+      return activeFor>FOREIGN_ON_FIELD;
+    });
+    if(foreignErrors.length>0){
+      alert(`外国人枠オーバーのチームがあります（1軍登録${FOREIGN_ON_FIELD}人以内）：\n${foreignErrors.map(tm=>{const cnt=[...tm.batterIds,...tm.pitcherIds].filter(id=>state.pool[id]?.foreign&&!state.pool[id]?.farm).length;return `・${tm.name}（${cnt}人）`;}).join("\n")}\n\nSETUP画面で外国人選手をファームへ送るか、チェックを外してください。`);
+      return;
+    }
     try{
       const r=simulateSeason(state.teams,state.pool);
       setResult(r);setPendingSeason(r);setNews(null);setTab("results");setStatTab("standings");
@@ -1292,7 +1322,7 @@ export default function App(){
           <span>{START_YEAR+year-1}年（第{year}シーズン）の結果です。納得いくまで<b style={{color:accent}}>「再実行」</b>でやり直せます。確定するには<b style={{color:green}}>「オフへ進む」</b>。</span>
           <span style={{display:"flex",gap:8}}><button style={S.rerunBtnSm} onClick={runOne}>↻ 再実行</button><button style={S.proceedBtnSm} onClick={proceedToDraft}>オフへ進む ▶</button></span>
         </div>}
-        <div style={S.statTabs}>{[["standings","順位表"],["batting","打撃(今季)"],["pitching","投手(今季)"],["careerBat","通算打撃"],["careerPit","通算投手"],["hallBat","殿堂(打者)"],["hallPit","殿堂(投手)"],["news","オフ移籍"],["log","全試合"],["history","シーズン履歴"]].map(([k,l])=>(<button key={k} onClick={()=>setStatTab(k)} style={statTab===k?S.statTabA:S.statTab}>{l}</button>))}</div>
+        <div style={S.statTabs}>{[["standings","順位表"],["batting","打撃(今季)"],["pitching","投手(今季)"],["team","チーム別"],["careerBat","通算打撃"],["careerPit","通算投手"],["hallBat","殿堂(打者)"],["hallPit","殿堂(投手)"],["news","オフ移籍"],["log","全試合"],["history","シーズン履歴"]].map(([k,l])=>(<button key={k} onClick={()=>setStatTab(k)} style={statTab===k?S.statTabA:S.statTab}>{l}</button>))}</div>
         {statTab==="standings" && (<div>
           {result.japanSeries && <div style={S.jsBox}>
             <div style={S.jsTitle}>🏆 日本シリーズ</div>
@@ -1341,49 +1371,142 @@ export default function App(){
         </div>)}
         {(statTab==="batting"||statTab==="careerBat"||statTab==="hallBat") && (()=>{
           const isCur=statTab==="batting";const isHall=statTab==="hallBat";
-          const rows=(isCur?battingStats:isHall?hallBat:careerBatRows).slice().sort((a,b)=>batSort.dir*(typeof a[batSort.key]==="number"?b[batSort.key]-a[batSort.key]:0));
+          const teamNames=isCur?[...new Set(battingStats.map(s=>s.team))].sort():[];
+          const base=(isCur?battingStats:isHall?hallBat:careerBatRows).filter(s=>(!isCur||!statTeam||s.team===statTeam)&&(!qualBat||!isCur||s.PA>=QUAL_PA));
+          const rows=base.slice().sort((a,b)=>batSort.dir*(typeof a[batSort.key]==="number"?b[batSort.key]-a[batSort.key]:0));
           const cols=[["選手","name"],isCur?["チーム","team"]:isHall?["引退","retireAge"]:["年数","seasons"],["G","games"],["PA","PA"],["AB","AB"],["H","H"],["2B","_2B"],["3B","_3B"],["HR","HR"],["RBI","RBI"],["SB","SB"],["BB","BB"],["SO","SO"],["AVG","AVG"],["OBP","OBP"],["SLG","SLG"],["OPS","OPS"],["ISO","ISO"],["wOBA","wOBA"],["wRC+","wRCp"]];
           const thStyle=(key)=>({cursor:"pointer",userSelect:"none",color:batSort.key===key?accent:undefined,whiteSpace:"nowrap"});
           const onSort=(key)=>setBatSort(s=>({key,dir:s.key===key?-s.dir:-1}));
           const arrow=(key)=>batSort.key===key?(batSort.dir===-1?"▼":"▲"):"";
-          return(<div style={S.scrollX}><table style={S.statTable}><tbody>
-            <tr style={S.th}>{cols.map(([h,k],i)=><td key={k} style={i<2?{...S.tl,...(i>=2?thStyle(k):{})}:thStyle(k)} onClick={i>=2?()=>onSort(k):undefined}>{h}{i>=2?arrow(k):""}</td>)}</tr>
-            {rows.map((s,i)=>(<tr key={(s.id||s.name)+i} style={i%2?S.tr2:S.tr}>
-              <td style={S.tl}>{s.name}</td>
-              <td style={S.tl}>{isCur?s.team:isHall?`${s.retireAge}歳`:`${s.seasons}年`}</td>
-              <td>{s.games}</td><td>{s.PA}</td><td>{s.AB}</td><td>{s.H}</td><td>{s._2B}</td><td>{s._3B}</td>
-              <td style={batSort.key==="HR"?S.hl:{}}>{s.HR}</td><td>{s.RBI}</td><td>{s.SB}</td><td>{s.BB}</td><td>{s.SO}</td>
-              <td style={batSort.key==="AVG"?S.hl:{}}>{f3(s.AVG)}</td><td>{f3(s.OBP)}</td><td>{f3(s.SLG)}</td>
-              <td style={batSort.key==="OPS"?S.hl:{}}>{f3(s.OPS)}</td><td>{f3(s.ISO)}</td><td>{f3(s.wOBA)}</td>
-              <td style={batSort.key==="wRCp"?S.hl:{}}>{s.wRCp}</td>
-            </tr>))}
-          </tbody></table></div>);
+          return(<div>
+            {isCur&&<div style={{display:"flex",gap:12,alignItems:"center",marginBottom:8,flexWrap:"wrap"}}>
+              <label style={S.toggle}><input type="checkbox" checked={qualBat} onChange={e=>setQualBat(e.target.checked)} /> 規定打席のみ（{QUAL_PA}PA以上）</label>
+              <select style={{...S.numIn,width:"auto"}} value={statTeam} onChange={e=>setStatTeam(e.target.value)}>
+                <option value="">全チーム</option>
+                {teamNames.map(t=><option key={t} value={t}>{t}</option>)}
+              </select>
+              <span style={{fontSize:11,color:"#5a7a5a"}}>{rows.length}人</span>
+            </div>}
+            <div style={S.scrollX}><table style={S.statTable}><tbody>
+              <tr style={S.th}>{cols.map(([h,k],i)=><td key={k} style={i<2?{...S.tl,...(i>=2?thStyle(k):{})}:thStyle(k)} onClick={i>=2?()=>onSort(k):undefined}>{h}{i>=2?arrow(k):""}</td>)}</tr>
+              {rows.map((s,i)=>(<tr key={(s.id||s.name)+i} style={i%2?S.tr2:S.tr}>
+                <td style={S.tl}>{s.name}</td>
+                <td style={S.tl}>{isCur?s.team:isHall?`${s.retireAge}歳`:`${s.seasons}年`}</td>
+                <td>{s.games}</td><td>{s.PA}</td><td>{s.AB}</td><td>{s.H}</td><td>{s._2B}</td><td>{s._3B}</td>
+                <td style={batSort.key==="HR"?S.hl:{}}>{s.HR}</td><td>{s.RBI}</td><td>{s.SB}</td><td>{s.BB}</td><td>{s.SO}</td>
+                <td style={batSort.key==="AVG"?S.hl:{}}>{f3(s.AVG)}</td><td>{f3(s.OBP)}</td><td>{f3(s.SLG)}</td>
+                <td style={batSort.key==="OPS"?S.hl:{}}>{f3(s.OPS)}</td><td>{f3(s.ISO)}</td><td>{f3(s.wOBA)}</td>
+                <td style={batSort.key==="wRCp"?S.hl:{}}>{s.wRCp}</td>
+              </tr>))}
+            </tbody></table></div>
+          </div>);
         })()}
         {(statTab==="pitching"||statTab==="careerPit"||statTab==="hallPit") && (()=>{
           const isCur=statTab==="pitching";const isHall=statTab==="hallPit";
-          const rows=(isCur?pitchingStats:isHall?hallPit:careerPitRows).slice().sort((a,b)=>pitSort.dir*(typeof a[pitSort.key]==="number"?b[pitSort.key]-a[pitSort.key]:0));
+          const pitTeamNames=isCur?[...new Set(pitchingStats.map(s=>s.team))].sort():[];
+          const eraAsc=["ERA","FIP","WHIP","BB9"];
+          const base=(isCur?pitchingStats:isHall?hallPit:careerPitRows).filter(s=>(!isCur||!statTeam||s.team===statTeam)&&(!qualPit||!isCur||s.IP>=QUAL_IP));
+          const rows=base.slice().sort((a,b)=>pitSort.dir*(typeof a[pitSort.key]==="number"?b[pitSort.key]-a[pitSort.key]:0));
           const cols=[["選手","name"],isCur?["チーム","team"]:isHall?["引退","retireAge"]:["年数","seasons"],["役割","role"],["G","G"],["W","W"],["L","L"],["SV","SV"],["IP","IP"],["SO","SO"],["BB","BB"],["ERA","ERA"],["FIP","FIP"],["WHIP","WHIP"],["K/9","K9"],["BB/9","BB9"]];
           const thStyle=(key)=>({cursor:"pointer",userSelect:"none",color:pitSort.key===key?accent:undefined,whiteSpace:"nowrap"});
-          const onSort=(key)=>setPitSort(s=>({key,dir:s.key===key?-s.dir:-1}));
           const arrow=(key)=>pitSort.key===key?(pitSort.dir===-1?"▼":"▲"):"";
-          const eraAsc=["ERA","FIP","WHIP","BB9"];
-          return(<div style={S.scrollX}><table style={S.statTable}><tbody>
-            <tr style={S.th}>{cols.map(([h,k],i)=><td key={k} style={i<2?{...S.tl,...(i>=2?thStyle(k):{})}:thStyle(k)} onClick={i>=3?()=>setPitSort(s=>({key:k,dir:s.key===k?-s.dir:eraAsc.includes(k)?1:-1})):undefined}>{h}{i>=3?arrow(k):""}</td>)}</tr>
-            {rows.map((s,i)=>(<tr key={(s.id||s.name)+i} style={i%2?S.tr2:S.tr}>
-              <td style={S.tl}>{s.name}</td>
-              <td style={S.tl}>{isCur?s.team:isHall?`${s.retireAge}歳`:`${s.seasons}年`}</td>
-              <td>{s.role==="SP"?"先発":"救援"}</td><td>{s.G}</td>
-              <td style={pitSort.key==="W"?S.hl:{}}>{s.W}</td><td>{s.L}</td><td>{s.SV}</td>
-              <td>{s.IP.toFixed(1)}</td><td>{s.SO}</td><td>{s.BB}</td>
-              <td style={pitSort.key==="ERA"?S.hl:{}}>{f2(s.ERA)}</td>
-              <td style={pitSort.key==="FIP"?S.hl:{}}>{f2(s.FIP)}</td>
-              <td>{f2(s.WHIP)}</td><td>{f2(s.K9)}</td><td>{f2(s.BB9)}</td>
-            </tr>))}
-          </tbody></table></div>);
+          return(<div>
+            {isCur&&<div style={{display:"flex",gap:12,alignItems:"center",marginBottom:8,flexWrap:"wrap"}}>
+              <label style={S.toggle}><input type="checkbox" checked={qualPit} onChange={e=>setQualPit(e.target.checked)} /> 規定投球回のみ（{QUAL_IP}IP以上）</label>
+              <select style={{...S.numIn,width:"auto"}} value={statTeam} onChange={e=>setStatTeam(e.target.value)}>
+                <option value="">全チーム</option>
+                {pitTeamNames.map(t=><option key={t} value={t}>{t}</option>)}
+              </select>
+              <span style={{fontSize:11,color:"#5a7a5a"}}>{rows.length}人</span>
+            </div>}
+            <div style={S.scrollX}><table style={S.statTable}><tbody>
+              <tr style={S.th}>{cols.map(([h,k],i)=><td key={k} style={i<2?{...S.tl,...(i>=2?thStyle(k):{})}:thStyle(k)} onClick={i>=3?()=>setPitSort(s=>({key:k,dir:s.key===k?-s.dir:eraAsc.includes(k)?1:-1})):undefined}>{h}{i>=3?arrow(k):""}</td>)}</tr>
+              {rows.map((s,i)=>(<tr key={(s.id||s.name)+i} style={i%2?S.tr2:S.tr}>
+                <td style={S.tl}>{s.name}</td>
+                <td style={S.tl}>{isCur?s.team:isHall?`${s.retireAge}歳`:`${s.seasons}年`}</td>
+                <td>{s.role==="SP"?"先発":"救援"}</td><td>{s.G}</td>
+                <td style={pitSort.key==="W"?S.hl:{}}>{s.W}</td><td>{s.L}</td><td>{s.SV}</td>
+                <td>{s.IP.toFixed(1)}</td><td>{s.SO}</td><td>{s.BB}</td>
+                <td style={pitSort.key==="ERA"?S.hl:{}}>{f2(s.ERA)}</td>
+                <td style={pitSort.key==="FIP"?S.hl:{}}>{f2(s.FIP)}</td>
+                <td>{f2(s.WHIP)}</td><td>{f2(s.K9)}</td><td>{f2(s.BB9)}</td>
+              </tr>))}
+            </tbody></table></div>
+          </div>);
+        })()}
+        {statTab==="team" && (()=>{
+          if(!result)return<div style={S.note}>シーズンを実行してください。</div>;
+          const teamList=[...new Set(battingStats.map(s=>s.team))].sort();
+          return(<div>{teamList.map(tn=>{
+            const bRows=battingStats.filter(s=>s.team===tn);
+            const pRows=pitchingStats.filter(s=>s.team===tn);
+            const totB=bRows.reduce((acc,s)=>({PA:acc.PA+s.PA,AB:acc.AB+s.AB,H:acc.H+s.H,_2B:acc._2B+s._2B,_3B:acc._3B+s._3B,HR:acc.HR+s.HR,RBI:acc.RBI+s.RBI,SB:acc.SB+s.SB,BB:acc.BB+s.BB,HBP:acc.HBP+(s.HBP||0),SO:acc.SO+s.SO}),{PA:0,AB:0,H:0,_2B:0,_3B:0,HR:0,RBI:0,SB:0,BB:0,HBP:0,SO:0});
+            const tAVG=totB.AB?totB.H/totB.AB:0;const tOBP=(totB.AB+totB.BB+totB.HBP)?((totB.H+totB.BB+totB.HBP)/(totB.AB+totB.BB+totB.HBP)):0;
+            const tSLG=totB.AB?((totB.H-totB._2B-totB._3B-totB.HR)+2*totB._2B+3*totB._3B+4*totB.HR)/totB.AB:0;
+            const totP=pRows.reduce((acc,s)=>({IP:acc.IP+s.IP,ER:acc.ER+(s.ER||0),H:acc.H+(s.H||0),BB:acc.BB+s.BB,SO:acc.SO+s.SO,W:acc.W+s.W,L:acc.L+s.L,SV:acc.SV+s.SV}),{IP:0,ER:0,H:0,BB:0,SO:0,W:0,L:0,SV:0});
+            const tERA=totP.IP?totP.ER*9/totP.IP:0;const tWHIP=totP.IP?(totP.BB+totP.H)/totP.IP:0;const tK9=totP.IP?totP.SO*9/totP.IP:0;
+            return(<div key={tn} style={{borderBottom:`1px solid ${line}`,paddingBottom:14,marginBottom:14}}>
+              <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:20,color:accent,letterSpacing:2,marginBottom:8}}>{tn}</div>
+              <div style={{display:"flex",gap:24,flexWrap:"wrap",marginBottom:10}}>
+                <div>
+                  <div style={{fontSize:11,color:"#7a8a7a",marginBottom:4}}>チーム打撃</div>
+                  <div style={{fontFamily:"'Roboto Mono',monospace",fontSize:12,color:"#c0c8c0"}}>
+                    {totB.PA}PA {totB.HR}HR {totB.RBI}打点 {totB.SB}盗塁 /{" "}
+                    打率<span style={{color:accent}}>{f3(tAVG)}</span>{" "}
+                    出塁<span style={{color:accent}}>{f3(tOBP)}</span>{" "}
+                    長打<span style={{color:accent}}>{f3(tSLG)}</span>{" "}
+                    OPS<span style={{color:accent}}>{f3(tOBP+tSLG)}</span>
+                  </div>
+                </div>
+                <div>
+                  <div style={{fontSize:11,color:"#7a8a7a",marginBottom:4}}>チーム投手</div>
+                  <div style={{fontFamily:"'Roboto Mono',monospace",fontSize:12,color:"#c0c8c0"}}>
+                    {totP.W}勝{totP.L}敗{totP.SV}S {totP.IP.toFixed(1)}IP /{" "}
+                    防御率<span style={{color:accent}}>{f2(tERA)}</span>{" "}
+                    WHIP<span style={{color:accent}}>{f2(tWHIP)}</span>{" "}
+                    K/9<span style={{color:accent}}>{f2(tK9)}</span>
+                  </div>
+                </div>
+              </div>
+              <div style={{display:"flex",gap:20,flexWrap:"wrap"}}>
+                <div style={S.scrollX}>
+                  <div style={{fontSize:11,color:"#7a8a7a",marginBottom:4}}>打者成績（規定外含む）</div>
+                  <table style={S.statTable}><tbody>
+                    <tr style={S.th}>{["選手","G","PA","HR","RBI","SB","AVG","OBP","SLG","OPS"].map(h=><td key={h} style={h==="選手"?S.tl:{}}>{h}</td>)}</tr>
+                    {bRows.slice().sort((a,b)=>b.OPS-a.OPS).map((s,i)=><tr key={s.id} style={i%2?S.tr2:S.tr}>
+                      <td style={S.tl}>{s.name}</td><td>{s.games}</td><td>{s.PA}</td><td>{s.HR}</td><td>{s.RBI}</td><td>{s.SB}</td>
+                      <td>{f3(s.AVG)}</td><td>{f3(s.OBP)}</td><td>{f3(s.SLG)}</td><td>{f3(s.OPS)}</td>
+                    </tr>)}
+                  </tbody></table>
+                </div>
+                <div style={S.scrollX}>
+                  <div style={{fontSize:11,color:"#7a8a7a",marginBottom:4}}>投手成績</div>
+                  <table style={S.statTable}><tbody>
+                    <tr style={S.th}>{["選手","役割","G","W","L","SV","IP","SO","ERA","WHIP"].map(h=><td key={h} style={h==="選手"?S.tl:{}}>{h}</td>)}</tr>
+                    {pRows.slice().sort((a,b)=>a.ERA-b.ERA).map((s,i)=><tr key={s.id} style={i%2?S.tr2:S.tr}>
+                      <td style={S.tl}>{s.name}</td><td>{s.role==="SP"?"先発":"救援"}</td>
+                      <td>{s.G}</td><td>{s.W}</td><td>{s.L}</td><td>{s.SV}</td>
+                      <td>{s.IP.toFixed(1)}</td><td>{s.SO}</td><td>{f2(s.ERA)}</td><td>{f2(s.WHIP)}</td>
+                    </tr>)}
+                  </tbody></table>
+                </div>
+              </div>
+            </div>);
+          })}</div>);
         })()}
         {statTab==="news" && news && (<div style={S.newsWrap}>{[["retire","◆ 引退"],["overseas","◆ 海外挑戦"],["return","◆ 国内復帰"],["release","◆ 戦力外（成績準拠）"],["trade","◆ トレード"],["fa","◆ FA・契約"],["draft","◆ ドラフト入団"]].map(([k,l])=>(<div key={k}><div style={S.newsHead}>{l}（{news[k].length}）</div>{news[k].length?news[k].map((t,i)=><div key={i} style={S.newsRow}>{t}</div>):<div style={S.newsRowDim}>なし</div>}</div>))}</div>)}
         {statTab==="news" && !news && <div style={S.note}>まだオフシーズンを消化していません。</div>}
-        {statTab==="log" && (<div><input style={S.filterIn} placeholder="チーム名でフィルタ…" value={logFilter} onChange={e=>setLogFilter(e.target.value)} /><div style={S.logWrap}>{result.gameLog.filter(g=>!logFilter||g.home.includes(logFilter)||g.away.includes(logFilter)).map((g,i)=>(<div key={i} style={S.logRow}><span style={S.logNo}>#{g.gameNo}</span><span style={{...S.logTeam,fontWeight:g.winner===g.away?700:400,color:g.winner===g.away?accent:"#aaa"}}>{g.away}</span><span style={S.logScore}>{g.awayRuns} - {g.homeRuns}</span><span style={{...S.logTeam,fontWeight:g.winner===g.home?700:400,color:g.winner===g.home?accent:"#aaa"}}>{g.home}</span></div>))}</div></div>)}
+        {statTab==="log" && (()=>{
+          const logTeams=["全試合",...new Set(result.gameLog.flatMap(g=>[g.home,g.away]))].sort();
+          const filteredLog=result.gameLog.filter(g=>!logFilter||logFilter==="全試合"||g.home===logFilter||g.away===logFilter);
+          return(<div>
+            <select style={{...S.numIn,width:"auto",marginBottom:8}} value={logFilter||"全試合"} onChange={e=>setLogFilter(e.target.value==="全試合"?"":e.target.value)}>
+              {logTeams.map(t=><option key={t} value={t}>{t}</option>)}
+            </select>
+            <span style={{fontSize:11,color:"#5a7a5a",marginLeft:8}}>{filteredLog.length}試合</span>
+            <div style={S.logWrap}>{filteredLog.map((g,i)=>(<div key={i} style={S.logRow}><span style={S.logNo}>#{g.gameNo}</span><span style={{...S.logTeam,fontWeight:g.winner===g.away?700:400,color:g.winner===g.away?accent:"#aaa"}}>{g.away}</span><span style={S.logScore}>{g.awayRuns} - {g.homeRuns}</span><span style={{...S.logTeam,fontWeight:g.winner===g.home?700:400,color:g.winner===g.home?accent:"#aaa"}}>{g.home}</span></div>))}</div>
+          </div>);
+        })()}
         {statTab==="history" && (<div>
           {(!state.history||state.history.length===0)&&<div style={S.note}>まだシーズン履歴がありません。オフへ進むと記録されます。</div>}
           {(state.history||[]).map(h=>(
