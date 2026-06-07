@@ -436,10 +436,11 @@ function midSeasonSwap(teams,pool,batStat,pitStat){
     // 打率降格閾値：能力S/A→.170 B/C→.200 D/E→.225 F/G→.250
     const batThresh=b=>{const a=batAbil(b);return a>=80?.170:a>=65?.200:a>=50?.225:.250;};
     // 降格スコア（正のほど降格リスク高）＝(閾値-打率) × PA充足率
+    // PA50未満は評価対象外（序盤の小サンプルで落とさない）
     const batDScore=b=>{
-      const st=batStat[b.id];if(!st||st.PA<25)return -1;
+      const st=batStat[b.id];if(!st||st.PA<50)return -1;
       const avg=st.H/Math.max(1,st.AB);
-      const paW=Math.min(1,(st.PA-25)/60); // PA85で満点
+      const paW=Math.min(1,(st.PA-50)/80); // PA130で満点
       return paW*(batThresh(b)-avg);
     };
     const bat1=tm.batterIds.map(id=>pool[id]).filter(p=>p&&!p.farm&&p.status==="active");
@@ -453,7 +454,7 @@ function midSeasonSwap(teams,pool,batStat,pitStat){
       const down=batDown[i],up=batUp[i];if(!down||!up)break;
       // 降格選手より2軍選手の能力が低いなら確率低下
       const gap=batAbil(down)-batAbil(up); // 正=降格者が能力上
-      const prob=gap>25?0.20:gap>10?0.50:0.80;
+      const prob=gap>25?0.20:gap>10?0.45:0.65;
       if(rnd()<prob){
         down.farm=true;  // order は保持：戻ってきたとき元の打順に戻る
         up.farm=false;
@@ -464,7 +465,7 @@ function midSeasonSwap(teams,pool,batStat,pitStat){
     const pitAbil=p=>(p.stuff+p.control+p.stamina)/3;
     // ERA 閾値：能力S/A→5.50 B/C→4.80 D/E→4.20 F/G→3.80
     const pitThresh=p=>{const a=pitAbil(p);return a>=80?5.50:a>=65?4.80:a>=50?4.20:3.80;};
-    const pitMinIP=p=>p.role==="SP"?25:12;
+    const pitMinIP=p=>p.role==="SP"?40:20; // 評価開始IP引き上げ（序盤の荒れを拾わない）
     const pitDScore=p=>{
       const st=pitStat[p.id];if(!st||st.IP<pitMinIP(p))return -1;
       return (st.ER*9/Math.max(1,st.IP))-pitThresh(p);
@@ -477,7 +478,7 @@ function midSeasonSwap(teams,pool,batStat,pitStat){
     for(let i=0;i<pitN;i++){
       const down=pitDown[i],up=pitUp[i];if(!down||!up)break;
       const gap=pitAbil(down)-pitAbil(up);
-      const prob=gap>25?0.20:gap>10?0.50:0.80;
+      const prob=gap>25?0.20:gap>10?0.45:0.65;
       if(rnd()<prob){
         down.farm=true;
         if(down.rotation>=1&&down.rotation<=ROTATION_SIZE) down.rotation=0; // 先発はローテ消去
@@ -553,7 +554,7 @@ function simulateSeason(teams,pool){const batStat={},pitStat={};
   // 約6試合(1週間)ごとに入れ替え評価。lastSwapGame で重複呼び出しを防ぐ
   let lastSwapGame=0;
   const gameLog=[];schedule.forEach(m=>{
-    if(m.gameNo>lastSwapGame+5){midSeasonSwap(teams,pool,batStat,pitStat);lastSwapGame=m.gameNo;}
+    if(m.gameNo>lastSwapGame+7){midSeasonSwap(teams,pool,batStat,pitStat);lastSwapGame=m.gameNo;}
     const home=teams.find(t=>t.id===m.home),away=teams.find(t=>t.id===m.away);
     const hRes=teamGame(home,away,pool,batStat,pitStat,m.gameNo),aRes=teamGame(away,home,pool,batStat,pitStat,m.gameNo);
     let hR=hRes.runs,aR=aRes.runs;
