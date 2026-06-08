@@ -839,9 +839,16 @@ function importLeague(text){UID=0;const teams=[];const pool={};let cur=null;cons
 // 1軍(farm=false)なのにrotation=0の投手に適切な番手を割り当てる
 // processOffseason後やmigrate後に呼び、farm/rotation の整合性を保つ
 function fixPitcherRotations(teams,pool){
+  const abil=p=>(p.stuff+p.control+p.stamina)/3;
   teams.forEach(tm=>{
-    // farm=trueなのにrotation>0の不整合を先にクリア（復元時・オフシーズン後の防衛策）
+    // Step1: farm=true なのに rotation>0 → 0 にリセット
     tm.pitcherIds.map(id=>pool[id]).filter(p=>p&&p.farm&&p.rotation!==0).forEach(p=>{p.rotation=0;});
+    // Step2: farm=false で同一 rotation が重複 → 能力低い方を 0 にリセット
+    const seen={};
+    tm.pitcherIds.map(id=>pool[id]).filter(p=>p&&!p.farm&&p.rotation>0)
+      .sort((a,b)=>abil(b)-abil(a)) // 能力高い順に処理し、高い方を優先して保持
+      .forEach(p=>{if(seen[p.rotation])p.rotation=0;else seen[p.rotation]=true;});
+    // Step3: farm=false で rotation===0 → 空きスロットに割り当て
     const used={};
     tm.pitcherIds.map(id=>pool[id]).filter(p=>p&&!p.farm&&p.rotation>0).forEach(p=>{used[p.rotation]=true;});
     tm.pitcherIds.map(id=>pool[id]).filter(p=>p&&!p.farm&&p.rotation===0).forEach(p=>{
@@ -850,7 +857,7 @@ function fixPitcherRotations(teams,pool){
         if(s<=ROTATION_SIZE){p.rotation=s;used[s]=true;}else{p.rotation=ROTATION_RP_MIN;used[ROTATION_RP_MIN]=true;}
       }else{
         let s=ROTATION_RP_MIN;while(used[s]&&s<=ROTATION_RP_MAX)s++;
-        p.rotation=Math.min(s,ROTATION_RP_MAX); // スロット満員でも最後尾に重複割当
+        p.rotation=Math.min(s,ROTATION_RP_MAX);
         used[p.rotation]=true;
       }
     });
