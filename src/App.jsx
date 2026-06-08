@@ -858,9 +858,18 @@ function fixPitcherRotations(teams,pool){
         else{let r=ROTATION_RP_MIN;while(used[r]&&r<=ROTATION_RP_MAX)r++;if(r<=ROTATION_RP_MAX){p.rotation=r;used[r]=true;}else p.farm=true;}
       }else{
         let s=ROTATION_RP_MIN;while(used[s]&&s<=ROTATION_RP_MAX)s++;
-        if(s<=ROTATION_RP_MAX){p.rotation=s;used[s]=true;}else p.farm=true; // 満員なら二軍
+        if(s<=ROTATION_RP_MAX){p.rotation=s;used[s]=true;}else p.farm=true;
       }
     });
+    // Step4: 抑えが1人もいなければ最優秀RPを抑えに昇格、複数いれば1人に絞る
+    const closers=tm.pitcherIds.map(id=>pool[id]).filter(p=>p&&!p.farm&&p.rotation>=ROTATION_CLOSER_MIN&&p.rotation<=ROTATION_CLOSER_MAX);
+    if(closers.length===0){
+      const bestRP=tm.pitcherIds.map(id=>pool[id]).filter(p=>p&&!p.farm&&p.rotation>=ROTATION_RP_MIN&&p.rotation<=ROTATION_RP_MAX).sort((a,b)=>abil(b)-abil(a))[0];
+      if(bestRP){bestRP.rotation=ROTATION_CLOSER_MIN;used[ROTATION_CLOSER_MIN]=true;}
+    }else if(closers.length>1){
+      closers.sort((a,b)=>abil(b)-abil(a));
+      closers.slice(1).forEach(p=>{let s=ROTATION_RP_MIN;while(used[s]&&s<=ROTATION_RP_MAX)s++;if(s<=ROTATION_RP_MAX){p.rotation=s;used[s]=true;}else p.farm=true;});
+    }
   });
 }
 
