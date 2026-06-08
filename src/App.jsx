@@ -373,38 +373,34 @@ function teamGame(off,def,pool,batStat,pitStat,gameNo){
     // 残りは守備固め：出場のみ（games++済み）、打席なし
   });
   let closerPitched=null;
+  const pitBox=[]; // [{name, ip, h, er, bb, so}] 登板順
   if(usedSP&&pitStat[usedSP.id]){const ps=pitStat[usedSP.id];const f=ps.injuryFactor;const spIP=clamp(6.0*f*(0.80+norm(usedSP.stamina)*0.30),3.5,8);
-    ps.IP+=spIP;ps.G++;ps.ER+=runs*(spIP/9);ps.SO+=Math.round(spIP*(0.50+norm(effStuff(usedSP))*0.45)*clamp(spForm,0.8,1.5));ps.BB+=Math.max(0,Math.round(spIP*(0.34-norm(usedSP.control)*0.20)));ps.H+=Math.round(runs*0.75+spIP*0.70);if(rnd()<0.18)ps.HR++;
+    const spH=Math.round(runs*0.75+spIP*0.70);const spER=Math.round(runs*(spIP/9));const spBB=Math.max(0,Math.round(spIP*(0.34-norm(usedSP.control)*0.20)));const spSO=Math.round(spIP*(0.50+norm(effStuff(usedSP))*0.45)*clamp(spForm,0.8,1.5));
+    ps.IP+=spIP;ps.G++;ps.ER+=spER;ps.SO+=spSO;ps.BB+=spBB;ps.H+=spH;if(rnd()<0.18)ps.HR++;
+    pitBox.push({name:usedSP.name,ip:Math.round(spIP*10)/10,h:spH,er:spER,bb:spBB,so:spSO});
     const remain=9-spIP;
     const notExhausted=p=>!pitStat[p.id]||pitStat[p.id].G<(pitStat[p.id].maxG??99);
     const closer=rp.find(p=>p.rotation>=ROTATION_CLOSER_MIN&&p.rotation<=ROTATION_CLOSER_MAX&&notExhausted(p));
     const mid=rp.filter(p=>!(p.rotation>=ROTATION_CLOSER_MIN&&p.rotation<=ROTATION_CLOSER_MAX)&&notExhausted(p));
-    // runs = 相手打線がうちの投手陣から奪った点数
-    // ≤3: 接戦（同点〜3点差リード想定） → セットアッパー(中1〜2)＋抑え
-    // ≥4: 4点差以上のリードまたはビハインド → ロング/ビハインド(中3〜5)、セットアッパー温存
-    const setup=mid.filter(p=>p.rotation<=ROTATION_RP_MIN+1).sort((a,b)=>a.rotation-b.rotation); // 中1〜2
-    const longR=mid.filter(p=>p.rotation>ROTATION_RP_MIN+1).sort((a,b)=>a.rotation-b.rotation);  // 中3〜5
-    // remainが多い（早期降板）ほど多くの中継ぎを使う
+    const setup=mid.filter(p=>p.rotation<=ROTATION_RP_MIN+1).sort((a,b)=>a.rotation-b.rotation);
+    const longR=mid.filter(p=>p.rotation>ROTATION_RP_MIN+1).sort((a,b)=>a.rotation-b.rotation);
     const targetN=remain<=2?1+(rnd()<0.50?1:0):remain<=4?2+(rnd()<0.50?1:0):3+(rnd()<0.40?1:0);
     const relievers=[];
     if(runs<=3){
-      // 接戦: セットアッパー中心
       const src=setup.length?setup:mid;
-      for(let i=0;i<Math.min(targetN,src.length);i++){
-        if(i===0||rnd()<(i===1?0.65:0.45))relievers.push(src[i]);
-      }
-      // セーブ条件（接戦の最終回）で抑え登板
+      for(let i=0;i<Math.min(targetN,src.length);i++){if(i===0||rnd()<(i===1?0.65:0.45))relievers.push(src[i]);}
       if(closer&&rnd()<0.90){relievers.push(closer);closerPitched=closer;}
     }else{
-      // 4点差以上/ビハインド: ロングリリーフ・ビハインド登板、セットアッパーは温存
-      const src=longR.length?longR:mid;
-      const sh=[...src].sort(()=>rnd()-0.5);
+      const src=longR.length?longR:mid;const sh=[...src].sort(()=>rnd()-0.5);
       relievers.push(...sh.slice(0,Math.min(targetN,sh.length)));
-      // 抑えはセーブ条件でないため原則登板しない
     }
     if(!relievers.length&&mid.length)relievers.push(mid[Math.floor(rnd()*mid.length)]);
-    relievers.forEach(p=>{if(!pitStat[p.id])return;const seg=remain/Math.max(1,relievers.length);const rs=pitStat[p.id];rs.IP+=seg;rs.G++;rs.ER+=(runs/9)*seg;rs.SO+=Math.round(seg*(0.60+norm(effStuff(p))*0.50));rs.BB+=Math.max(0,Math.round(seg*(0.33-norm(p.control)*0.16)));rs.H+=Math.round(seg*0.92);});}
-  return {runs, innings, sp:usedSP, closer:closerPitched, box:gameBox};
+    relievers.forEach(p=>{if(!pitStat[p.id])return;const seg=remain/Math.max(1,relievers.length);const rs=pitStat[p.id];
+      const rH=Math.round(seg*0.92);const rER=Math.round((runs/9)*seg);const rBB=Math.max(0,Math.round(seg*(0.33-norm(p.control)*0.16)));const rSO=Math.round(seg*(0.60+norm(effStuff(p))*0.50));
+      rs.IP+=seg;rs.G++;rs.ER+=rER;rs.SO+=rSO;rs.BB+=rBB;rs.H+=rH;
+      pitBox.push({name:p.name,ip:Math.round(seg*10)/10,h:rH,er:rER,bb:rBB,so:rSO});
+    });}
+  return {runs, innings, sp:usedSP, closer:closerPitched, box:gameBox, pitBox};
 }
 
 function rollInjury(){const r=rnd();if(r<0.70)return GAMES;if(r<0.83)return Math.floor(GAMES*(0.75+rnd()*0.22));if(r<0.95)return Math.floor(GAMES*(0.42+rnd()*0.28));return Math.floor(GAMES*(0.08+rnd()*0.28));}
@@ -635,7 +631,7 @@ function simulateSeason(teams,pool){const batStat={},pitStat={};
     record[home.id].RS+=hR;record[home.id].RA+=aR;record[away.id].RS+=aR;record[away.id].RA+=hR;
     if(isDraw){record[home.id].D++;record[away.id].D++;}
     else if(hR>aR){record[home.id].W++;record[away.id].L++;}else{record[away.id].W++;record[home.id].L++;}
-    gameLog.push({gameNo:m.gameNo,home:home.name,away:away.name,homeRuns:hR,awayRuns:aR,winner:isDraw?"引き分け":hR>aR?home.name:away.name,hi:hRes.innings,ai:aRes.innings,wpName,lpName,svName,homeBox:hRes.box,awayBox:aRes.box});});
+    gameLog.push({gameNo:m.gameNo,home:home.name,away:away.name,homeRuns:hR,awayRuns:aR,winner:isDraw?"引き分け":hR>aR?home.name:away.name,hi:hRes.innings,ai:aRes.innings,wpName,lpName,svName,homeBox:hRes.box,awayBox:aRes.box,homePitBox:aRes.pitBox,awayPitBox:hRes.pitBox});});
   // 両リーグ順位決定→CS→日本シリーズ
   const cl=Object.values(record).filter(r=>r.league==="central").sort((a,b)=>(b.W/Math.max(1,b.W+b.L))-(a.W/Math.max(1,a.W+a.L)));
   const pl=Object.values(record).filter(r=>r.league==="pacific").sort((a,b)=>(b.W/Math.max(1,b.W+b.L))-(a.W/Math.max(1,a.W+a.L)));
@@ -1640,13 +1636,13 @@ export default function App(){
                 {sg.lpName&&<span>負: <span style={{color:"#e08080"}}>{sg.lpName}</span></span>}
                 {sg.svName&&<span>S: <span style={{color:accent}}>{sg.svName}</span></span>}
               </div>
-              {(sg.awayBox||sg.homeBox)&&(()=>{
-                const BoxTable=({team,box})=>{
+              {(sg.awayBox||sg.homeBox||sg.awayPitBox||sg.homePitBox)&&(()=>{
+                const BatTable=({team,box})=>{
                   if(!box)return null;
                   const rows=Object.values(box).filter(r=>r.AB>0||r.BB>0);
                   if(!rows.length)return null;
                   return(<div style={{marginTop:8}}>
-                    <div style={{fontSize:10,color:"#5a7a5a",marginBottom:2}}>{team}</div>
+                    <div style={{fontSize:10,color:"#5a7a5a",marginBottom:2}}>{team} 打撃</div>
                     <table style={{...S.statTable,fontSize:11}}><tbody>
                       <tr style={S.th}><td style={{...S.tl,minWidth:80}}>打者</td><td style={{textAlign:"right",width:30}}>打数</td><td style={{textAlign:"right",width:30}}>安打</td><td style={{textAlign:"right",width:30}}>二塁</td><td style={{textAlign:"right",width:30}}>本塁</td><td style={{textAlign:"right",width:30}}>打点</td><td style={{textAlign:"right",width:30}}>四球</td><td style={{textAlign:"right",width:30}}>三振</td></tr>
                       {rows.map((r,i)=><tr key={i} style={i%2===0?S.tr:S.tr2}>
@@ -1662,9 +1658,32 @@ export default function App(){
                     </tbody></table>
                   </div>);
                 };
+                const PitTable=({team,pitBox,wpName,lpName,svName})=>{
+                  if(!pitBox||!pitBox.length)return null;
+                  return(<div style={{marginTop:8}}>
+                    <div style={{fontSize:10,color:"#5a7a5a",marginBottom:2}}>{team} 投手</div>
+                    <table style={{...S.statTable,fontSize:11}}><tbody>
+                      <tr style={S.th}><td style={{...S.tl,minWidth:80}}>投手</td><td style={{textAlign:"right",width:34}}>回</td><td style={{textAlign:"right",width:30}}>安打</td><td style={{textAlign:"right",width:30}}>自責</td><td style={{textAlign:"right",width:30}}>四球</td><td style={{textAlign:"right",width:30}}>三振</td><td style={{textAlign:"center",width:24}}></td></tr>
+                      {pitBox.map((r,i)=>{
+                        const note=r.name===wpName?"勝":r.name===lpName?"負":r.name===svName?"S":"";
+                        return(<tr key={i} style={i%2===0?S.tr:S.tr2}>
+                          <td style={S.tl}>{r.name}</td>
+                          <td style={{textAlign:"right"}}>{r.ip}</td>
+                          <td style={{textAlign:"right"}}>{r.h}</td>
+                          <td style={{textAlign:"right",color:r.er>3?"#e08080":"#888"}}>{r.er}</td>
+                          <td style={{textAlign:"right"}}>{r.bb}</td>
+                          <td style={{textAlign:"right",color:r.so>5?"#a8e0a8":"#888"}}>{r.so}</td>
+                          <td style={{textAlign:"center",color:note==="勝"?"#a8e0a8":note==="負"?"#e08080":accent,fontWeight:note?700:400}}>{note}</td>
+                        </tr>);
+                      })}
+                    </tbody></table>
+                  </div>);
+                };
                 return(<div style={S.scrollX}>
-                  <BoxTable team={sg.away} box={sg.awayBox}/>
-                  <BoxTable team={sg.home} box={sg.homeBox}/>
+                  <div style={{display:"flex",gap:16,flexWrap:"wrap"}}>
+                    <div><BatTable team={sg.away} box={sg.awayBox}/><PitTable team={sg.away} pitBox={sg.awayPitBox} wpName={sg.wpName} lpName={sg.lpName} svName={sg.svName}/></div>
+                    <div><BatTable team={sg.home} box={sg.homeBox}/><PitTable team={sg.home} pitBox={sg.homePitBox} wpName={sg.wpName} lpName={sg.lpName} svName={sg.svName}/></div>
+                  </div>
                 </div>);
               })()}
             </div>}
