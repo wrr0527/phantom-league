@@ -24,10 +24,10 @@ const INTERLEAGUE_RATIO = 0.18; // 交流戦の割合
 const JS_WINS = 4; // 日本シリーズは先に4勝
 const CS_S1_WINS = 2; // CSファーストステージ（先に2勝）
 const CS_F_WINS  = 4; // CSファイナルステージ（先に4勝、1位は1勝アドバンテージ）
-const GAMES=143, NUM_TEAMS=12, BATTERS_PER_TEAM=20, PITCHERS_PER_TEAM=16, FA_YEARS=8, RETIRE_AGE=36;
-// NPB準拠の枠
-const QUAL_PA  = Math.floor(GAMES * 3.1); // 規定打席（143×3.1≈443）
-const QUAL_IP  = GAMES;                   // 規定投球回（143）
+const GAMES=138, NUM_TEAMS=12, BATTERS_PER_TEAM=20, PITCHERS_PER_TEAM=16, FA_YEARS=8, RETIRE_AGE=36;
+// NPB準拠の枠（138試合制：8カード×5相手=120試合+交流戦18試合）
+const QUAL_PA  = Math.floor(GAMES * 3.1); // 規定打席（138×3.1≈428）
+const QUAL_IP  = GAMES;                   // 規定投球回（138）
 const ROSTER_31=31;       // 一軍登録上限（NPB準拠 固定）
 const BENCH_26=26;        // ベンチ入り上限（先発SP5人はオフ扱いで実質26人）
 const FOREIGN_ON_FIELD=5; // 外国人同時出場上限
@@ -254,27 +254,29 @@ function batterEventProbs(b,factor,form){const c=norm(b.contact),p=norm(b.power)
   let bb=clamp(0.030+e*0.065,0.018,0.115)*Math.sqrt(clamp(factor,0.7,1.3)*fm);
   let hbp=0.007;
   let k=clamp(0.21-c*0.12,0.085,0.27)*clamp(fk,0.6,1.5);
-  const hitCap=historic?1.16:1.11; // 通常.385未満、歴史的のみ100年に1度級で4割（高出塁はAVGを嵩上げするため低め設定）
-  const hitBase=clamp(0.160+c*0.138,0.130,0.340)*clamp(fhit,0.6,hitCap);
-  // HRはNPB水準（平均10-15本、エリート30-40本）
-  const hrBase=historic? (0.012+p*0.100) : (0.008+p*0.075);
-  let hr=clamp(hrBase,0.004,historic?0.110:0.095)*clamp(fhit,0.55,historic?1.90:1.78);
+  const hitCap=historic?1.18:1.13;
+  const hitBase=clamp(0.205+c*0.145,0.162,0.380)*clamp(fhit,0.6,hitCap);
+  // HRはNPB水準（平均8-12本、チーム100-120本、エリート30-40本）
+  const hrBase=historic?(0.010+p*0.085):(0.005+p*0.062);
+  let hr=clamp(hrBase,0.002,historic?0.095:0.080)*clamp(fhit,0.55,historic?1.85:1.70);
   let triple=0.0025*clamp(fhit,0.6,1.5);                               // 三塁打は稀
   let dbl=hitBase*0.185;
   let sgl=Math.max(0,hitBase-hr-triple-dbl);
   let out=Math.max(0,1-(bb+hbp+k+hr+triple+dbl+sgl));
   return {bb,hbp,k,sgl,dbl,triple,hr,out};}
 function pushWalk(bases){if(bases[0]&&bases[1]&&bases[2])return 1;if(bases[0]&&bases[1]){bases[2]=true;return 0;}if(bases[0]){bases[1]=true;return 0;}bases[0]=true;return 0;}
-function simInning(ls,batStat,getProbs){let outs=0,bases=[false,false,false],runs=0,safety=0;
-  while(outs<3&&safety<60){safety++;const b=ls.next();const st=batStat[b.id];const pr=getProbs(b);const x=rnd();let cum=0;if(st)st.PA++;
-    cum+=pr.k;if(x<cum){if(st){st.AB++;st.SO++;}outs++;continue;}
-    cum+=pr.out;if(x<cum){if(st)st.AB++;if(bases[0]&&outs<2&&rnd()<0.12){outs+=2;bases[0]=false;}else{outs++;if(bases[2]&&outs<3&&rnd()<0.25){runs++;bases[2]=false;if(st)st.RBI++;}}continue;}
-    cum+=pr.bb;if(x<cum){if(st)st.BB++;const r=pushWalk(bases);runs+=r;if(st){st.RBI+=r;if(!bases[1]&&norm(b.speed)>0.40&&rnd()<norm(b.speed)*0.22)st.SB++;}continue;}
-    cum+=pr.hbp;if(x<cum){if(st)st.HBP++;const r=pushWalk(bases);runs+=r;if(st)st.RBI+=r;continue;}
-    cum+=pr.hr;if(x<cum){const r=1+(bases[0]?1:0)+(bases[1]?1:0)+(bases[2]?1:0);bases=[false,false,false];runs+=r;if(st){st.AB++;st.H++;st.HR++;st.RBI+=r;st.R++;}continue;}
-    cum+=pr.triple;if(x<cum){const r=(bases[0]?1:0)+(bases[1]?1:0)+(bases[2]?1:0);bases=[false,false,true];runs+=r;if(st){st.AB++;st.H++;st._3B++;st.RBI+=r;}continue;}
-    cum+=pr.dbl;if(x<cum){let r=(bases[1]?1:0)+(bases[2]?1:0);let third=false;if(bases[0]){if(rnd()<0.45)r++;else third=true;}bases=[false,true,third];runs+=r;if(st){st.AB++;st.H++;st._2B++;st.RBI+=r;}continue;}
-    {let r=bases[2]?1:0;let third=bases[1];if(bases[1]&&rnd()<0.55){r++;third=false;}bases=[true,bases[0],third];runs+=r;if(st){st.AB++;st.H++;st.RBI+=r;if(!bases[1]&&norm(b.speed)>0.35&&rnd()<norm(b.speed)*0.52)st.SB++;}}
+function simInning(ls,batStat,getProbs,gameBox){let outs=0,bases=[false,false,false],runs=0,safety=0;
+  while(outs<3&&safety<60){safety++;const b=ls.next();const st=batStat[b.id];
+    const gb=gameBox?(gameBox[b.id]||(gameBox[b.id]={name:b.name,AB:0,H:0,_2B:0,HR:0,BB:0,RBI:0,SO:0})):null;
+    const pr=getProbs(b);const x=rnd();let cum=0;if(st)st.PA++;
+    cum+=pr.k;if(x<cum){if(st){st.AB++;st.SO++;}if(gb){gb.AB++;gb.SO++;}outs++;continue;}
+    cum+=pr.out;if(x<cum){if(st)st.AB++;if(gb)gb.AB++;if(bases[0]&&outs<2&&rnd()<0.12){outs+=2;bases[0]=false;}else{outs++;if(bases[2]&&outs<3&&rnd()<0.25){runs++;bases[2]=false;if(st)st.RBI++;if(gb)gb.RBI++;}}continue;}
+    cum+=pr.bb;if(x<cum){if(st)st.BB++;if(gb)gb.BB++;const r=pushWalk(bases);runs+=r;if(st){st.RBI+=r;if(!bases[1]&&norm(b.speed)>0.40&&rnd()<norm(b.speed)*0.22)st.SB++;}if(gb)gb.RBI+=r;continue;}
+    cum+=pr.hbp;if(x<cum){if(st)st.HBP++;const r=pushWalk(bases);runs+=r;if(st)st.RBI+=r;if(gb)gb.RBI+=r;continue;}
+    cum+=pr.hr;if(x<cum){const r=1+(bases[0]?1:0)+(bases[1]?1:0)+(bases[2]?1:0);bases=[false,false,false];runs+=r;if(st){st.AB++;st.H++;st.HR++;st.RBI+=r;st.R++;}if(gb){gb.AB++;gb.H++;gb.HR++;gb.RBI+=r;}continue;}
+    cum+=pr.triple;if(x<cum){const r=(bases[0]?1:0)+(bases[1]?1:0)+(bases[2]?1:0);bases=[false,false,true];runs+=r;if(st){st.AB++;st.H++;st._3B++;st.RBI+=r;}if(gb){gb.AB++;gb.H++;gb.RBI+=r;}continue;}
+    cum+=pr.dbl;if(x<cum){let r=(bases[1]?1:0)+(bases[2]?1:0);let third=false;if(bases[0]){if(rnd()<0.45)r++;else third=true;}bases=[false,true,third];runs+=r;if(st){st.AB++;st.H++;st._2B++;st.RBI+=r;}if(gb){gb.AB++;gb.H++;gb._2B++;gb.RBI+=r;}continue;}
+    {let r=bases[2]?1:0;let third=bases[1];if(bases[1]&&rnd()<0.55){r++;third=false;}bases=[true,bases[0],third];runs+=r;if(st){st.AB++;st.H++;st.RBI+=r;if(!bases[1]&&norm(b.speed)>0.35&&rnd()<norm(b.speed)*0.52)st.SB++;}if(gb){gb.AB++;gb.H++;gb.RBI+=r;}}
   }return runs;}
 function pitcherFactor(p){return clamp(1.30-norm(effStuff(p))*0.40-norm(p.control)*0.20,0.65,1.35);}
 
@@ -349,7 +351,7 @@ function teamGame(off,def,pool,batStat,pitStat,gameNo){
   const factor=pitcherFactor(usedSP)*(0.85+rnd()*0.3)/Math.sqrt(spForm); // 好調(form>1)ほどfactor低下＝抑える
   const cache={};const getProbs=(b)=>cache[b.id]||(cache[b.id]=batterEventProbs(b,factor,batStat[b.id]?.form));
   let idx=0;const {lineup,bench}=pickLineup(off,pool,batStat);const ls={next:()=>lineup[idx++%lineup.length]};
-  const innings=[];let runs=0;for(let i=0;i<9;i++){const r=simInning(ls,batStat,getProbs);innings.push(r);runs+=r;}
+  const gameBox={};const innings=[];let runs=0;for(let i=0;i<9;i++){const r=simInning(ls,batStat,getProbs,gameBox);innings.push(r);runs+=r;}
   lineup.forEach(b=>{if(batStat[b.id])batStat[b.id].games++;});
   // 控えの部分出場（代打・代走・守備固め）：毎試合1〜3人が1打席前後だけ出る
   const subCount=Math.min(bench.length, 1+Math.floor(rnd()*3));
@@ -392,7 +394,7 @@ function teamGame(off,def,pool,batStat,pitStat,gameNo){
         if(i===0||rnd()<(i===1?0.65:0.45))relievers.push(src[i]);
       }
       // セーブ条件（接戦の最終回）で抑え登板
-      if(closer&&rnd()<0.72){relievers.push(closer);closerPitched=closer;}
+      if(closer&&rnd()<0.90){relievers.push(closer);closerPitched=closer;}
     }else{
       // 4点差以上/ビハインド: ロングリリーフ・ビハインド登板、セットアッパーは温存
       const src=longR.length?longR:mid;
@@ -402,29 +404,33 @@ function teamGame(off,def,pool,batStat,pitStat,gameNo){
     }
     if(!relievers.length&&mid.length)relievers.push(mid[Math.floor(rnd()*mid.length)]);
     relievers.forEach(p=>{if(!pitStat[p.id])return;const seg=remain/Math.max(1,relievers.length);const rs=pitStat[p.id];rs.IP+=seg;rs.G++;rs.ER+=(runs/9)*seg;rs.SO+=Math.round(seg*(0.60+norm(effStuff(p))*0.50));rs.BB+=Math.max(0,Math.round(seg*(0.33-norm(p.control)*0.16)));rs.H+=Math.round(seg*0.92);});}
-  return {runs, innings, sp:usedSP, closer:closerPitched};
+  return {runs, innings, sp:usedSP, closer:closerPitched, box:gameBox};
 }
 
-function rollInjury(){const r=rnd();if(r<0.50)return GAMES;if(r<0.78)return Math.floor(GAMES*(0.7+rnd()*0.25));if(r<0.94)return Math.floor(GAMES*(0.4+rnd()*0.3));return Math.floor(GAMES*(0.05+rnd()*0.3));}
+function rollInjury(){const r=rnd();if(r<0.70)return GAMES;if(r<0.83)return Math.floor(GAMES*(0.75+rnd()*0.22));if(r<0.95)return Math.floor(GAMES*(0.42+rnd()*0.28));return Math.floor(GAMES*(0.08+rnd()*0.28));}
 
-// リーグ内中心＋交流戦のスケジュール。各球団おおむねGAMES試合になるよう生成
+// 3試合1カード形式のスケジュール（NPB準拠）
+// リーグ内：各ペア8カード×3試合=24試合（5相手×24=120試合/チーム）
+// 交流戦：各ペア1カード×3試合（6相手×3=18試合/チーム）→合計138試合
 function buildSchedule(teams){
   const central=teams.filter(t=>t.league==="central").map(t=>t.id);
   const pacific=teams.filter(t=>t.league==="pacific").map(t=>t.id);
-  const schedule=[];
-  const interGames=Math.round(GAMES*INTERLEAGUE_RATIO);
-  const intraGames=GAMES-interGames;
-  // リーグ内総当たり：各日リーグごとにペアを作る
-  const pairUp=(ids,gameNo)=>{const o=[...ids];for(let i=o.length-1;i>0;i--){const j=Math.floor(rnd()*(i+1));[o[i],o[j]]=[o[j],o[i]];}const res=[];for(let i=0;i+1<o.length;i+=2)res.push({home:o[i],away:o[i+1],gameNo,inter:false});return res;};
-  for(let g=0;g<intraGames;g++){ schedule.push(...pairUp(central,g+1)); schedule.push(...pairUp(pacific,g+1)); }
-  // 交流戦：セ×パを1対1で総当たり風に均等に組む（各チームの試合数を揃える）
-  for(let g=0;g<interGames;g++){
-    const offset=g%pacific.length;
-    for(let i=0;i<central.length;i++){
-      const c=central[i]; const p=pacific[(i+offset)%pacific.length];
-      schedule.push({home:rnd()<0.5?c:p,away:rnd()<0.5?p:c,gameNo:intraGames+g+1,inter:true});
-    }
-  }
+  const series=[];
+  // リーグ内カード（4ホーム+4アウェイ=8カード/ペア）
+  const addIntra=(ids)=>{
+    for(let i=0;i<ids.length;i++){for(let j=i+1;j<ids.length;j++){
+      for(let s=0;s<8;s++){const flip=s%2===0;series.push({home:flip?ids[i]:ids[j],away:flip?ids[j]:ids[i],inter:false});}
+    }}
+  };
+  addIntra(central);addIntra(pacific);
+  // 交流戦カード（各ペア1カード、ホーム/アウェイランダム）
+  for(const c of central){for(const p of pacific){
+    const h=rnd()<0.5?c:p;series.push({home:h,away:h===c?p:c,inter:true});
+  }}
+  // シリーズをシャッフルして3試合に展開
+  for(let i=series.length-1;i>0;i--){const j=Math.floor(rnd()*(i+1));[series[i],series[j]]=[series[j],series[i]];}
+  const schedule=[];let gameNo=1;
+  series.forEach(s=>{for(let g=0;g<3;g++)schedule.push({home:s.home,away:s.away,gameNo:gameNo++,inter:s.inter});});
   return schedule;
 }
 // 日本シリーズ：両リーグ優勝チームで先にJS_WINS勝
@@ -598,7 +604,7 @@ function simulateSeason(teams,pool){const batStat={},pitStat={};
   const seasonNews=[];
   teams.forEach(tm=>{
     tm.batterIds.forEach(id=>{const b=pool[id];const maxG=rollInjury();if(maxG<GAMES*0.7){seasonNews.push({type:"injury",text:`【開幕前離脱】${b.name}（${tm.name}）故障 ※出場上限${maxG}試合`});}batStat[id]={id,name:b.name,team:tm.name,teamId:tm.id,age:b.age,games:0,maxGames:maxG,form:rollForm(),PA:0,AB:0,H:0,_2B:0,_3B:0,HR:0,BB:0,HBP:0,SO:0,RBI:0,R:0,SB:0};});
-    tm.pitcherIds.forEach(id=>{const p=pool[id];let inj=1;const r=rnd();if(r<0.12)inj=0.5;else if(r<0.2)inj=0.75;if(inj<1){seasonNews.push({type:"injury",text:`【開幕前離脱】${p.name}（${tm.name}）故障 ※登板数${Math.round(inj*100)}%制限`});}const baseMaxG=p.role==="SP"?30:50+Math.floor(rnd()*25);pitStat[id]={id,name:p.name,team:tm.name,teamId:tm.id,age:p.age,role:p.role,IP:0,H:0,HR:0,BB:0,SO:0,ER:0,W:0,L:0,SV:0,G:0,maxG:Math.floor(baseMaxG*inj),injuryFactor:inj,form:rollForm()};});
+    tm.pitcherIds.forEach(id=>{const p=pool[id];let inj=1;const r=rnd();if(r<0.05)inj=0.5;else if(r<0.11)inj=0.75;if(inj<1){seasonNews.push({type:"injury",text:`【開幕前離脱】${p.name}（${tm.name}）故障 ※登板数${Math.round(inj*100)}%制限`});}const baseMaxG=p.role==="SP"?30:50+Math.floor(rnd()*25);pitStat[id]={id,name:p.name,team:tm.name,teamId:tm.id,age:p.age,role:p.role,IP:0,H:0,HR:0,BB:0,SO:0,ER:0,W:0,L:0,SV:0,G:0,maxG:Math.floor(baseMaxG*inj),injuryFactor:inj,form:rollForm()};});
   });
   const record={};teams.forEach(tm=>record[tm.id]={name:tm.name,league:tm.league,W:0,L:0,D:0,RS:0,RA:0,id:tm.id});
   const schedule=buildSchedule(teams);
@@ -615,15 +621,21 @@ function simulateSeason(teams,pool){const batStat={},pitStat={};
       const ph=0.13+norm(avgH)*0.06,pa=0.13+norm(avgA)*0.06;
       for(let ex=0;ex<3&&hR===aR;ex++){if(rnd()<ph)hR++;if(rnd()<pa)aR++;}
     }
-    // 先発に勝敗 or ノーデシジョン。NPB同様、約35%は先発に勝敗が付かない（中継ぎが勝利等）
+    // 先発に勝敗 or ノーデシジョン（約20%はND）
+    // hRes.sp=アウェイ投手(ホーム打線に投げた)、aRes.sp=ホーム投手(アウェイ打線に投げた)
     const isDraw=hR===aR;
-    const decideSP=(spRes,won)=>{ if(!spRes.sp||!pitStat[spRes.sp.id])return; if(rnd()<0.35)return; won?pitStat[spRes.sp.id].W++:pitStat[spRes.sp.id].L++; };
-    if(!isDraw){decideSP(hRes,hR>aR); decideSP(aRes,aR>hR);}
-    const winCloser=hR>aR?aRes.closer:hRes.closer;if(!isDraw&&winCloser&&pitStat[winCloser.id]&&Math.abs(hR-aR)<=3)pitStat[winCloser.id].SV++;
+    let wpName=null,lpName=null,svName=null;
+    const decideSP=(spRes,won)=>{if(!spRes.sp||!pitStat[spRes.sp.id])return;if(rnd()<0.15)return;if(won){pitStat[spRes.sp.id].W++;wpName=spRes.sp.name;}else{pitStat[spRes.sp.id].L++;lpName=spRes.sp.name;}};
+    if(!isDraw){
+      decideSP(hRes,aR>hR); // アウェイ投手がアウェイチームの勝利で勝ち投手
+      decideSP(aRes,hR>aR); // ホーム投手がホームチームの勝利で勝ち投手
+    }
+    const winCloser=hR>aR?aRes.closer:hRes.closer;
+    if(!isDraw&&winCloser&&pitStat[winCloser.id]&&Math.abs(hR-aR)<=3){pitStat[winCloser.id].SV++;svName=winCloser.name;}
     record[home.id].RS+=hR;record[home.id].RA+=aR;record[away.id].RS+=aR;record[away.id].RA+=hR;
     if(isDraw){record[home.id].D++;record[away.id].D++;}
     else if(hR>aR){record[home.id].W++;record[away.id].L++;}else{record[away.id].W++;record[home.id].L++;}
-    gameLog.push({gameNo:m.gameNo,home:home.name,away:away.name,homeRuns:hR,awayRuns:aR,winner:isDraw?"引き分け":hR>aR?home.name:away.name,hi:hRes.innings,ai:aRes.innings});});
+    gameLog.push({gameNo:m.gameNo,home:home.name,away:away.name,homeRuns:hR,awayRuns:aR,winner:isDraw?"引き分け":hR>aR?home.name:away.name,hi:hRes.innings,ai:aRes.innings,wpName,lpName,svName,homeBox:hRes.box,awayBox:aRes.box});});
   // 両リーグ順位決定→CS→日本シリーズ
   const cl=Object.values(record).filter(r=>r.league==="central").sort((a,b)=>(b.W/Math.max(1,b.W+b.L))-(a.W/Math.max(1,a.W+a.L)));
   const pl=Object.values(record).filter(r=>r.league==="pacific").sort((a,b)=>(b.W/Math.max(1,b.W+b.L))-(a.W/Math.max(1,a.W+a.L)));
@@ -1017,7 +1029,36 @@ export default function App(){
   const STR_FIELDS=new Set(["name","role","bats","throws","position"]);
   const updatePlayer=(id,field,val)=>setState(s=>{const pool={...s.pool};pool[id]={...pool[id],[field]:STR_FIELDS.has(field)?val:Number(val)};return{...s,pool};});
   const updateAbility=(id,field,rankOrNum)=>setState(s=>{const pool={...s.pool};pool[id]={...pool[id],[field]:useRank?rankToVal(rankOrNum):clamp(Number(rankOrNum),1,99)};return{...s,pool};});
-  const updateInit=(id,field,val)=>setState(s=>{const pool={...s.pool};const p={...pool[id]};p.init={...p.init,[field]:Number(val)};pool[id]=p;return{...s,pool};});
+  const updateInit=(id,field,val)=>setState(s=>{
+    const pool={...s.pool};const p={...pool[id]};
+    const init={...p.init,[field]:Number(val)};
+    if(p.kind==="bat"){
+      const H=field==="H"?Number(val):(init.H||0);
+      const HR=field==="HR"?Number(val):(init.HR||0);
+      const seasons=field==="seasons"?Number(val):(init.seasons||0);
+      if(H>0&&seasons>0){
+        const AB=Math.round(H/0.268);const PA=Math.round(AB/0.908);
+        init.AB=AB;init.PA=PA;init.BB=Math.round(PA*0.086);init.HBP=Math.round(PA*0.007);
+        init.SO=Math.round(AB*0.155);init._2B=Math.round((H-HR)*0.21);init._3B=Math.max(0,Math.round((H-HR)*0.012));
+        init.RBI=Math.round(HR*3.5+(H-HR)*0.44);init.R=Math.round((H+(init.BB||0))*0.37);
+        init.SB=Math.round((H-HR)*0.065);init.games=Math.round(seasons*118);
+      }
+    }else{
+      const W=field==="W"?Number(val):(init.W||0);
+      const SV=field==="SV"?Number(val):(init.SV||0);
+      const seasons=field==="seasons"?Number(val):(init.seasons||0);
+      if(seasons>0){
+        const isSP=p.role==="SP";
+        const IP=isSP?seasons*155:seasons*55;const G=isSP?seasons*25:seasons*55;
+        init.IP=Math.round(IP*10)/10;init.G=G;
+        init.ER=Math.round(IP*3.65/9);init.H=Math.round(IP*8.4/9);
+        init.HR=Math.round(IP*0.90/9);init.BB=Math.round(IP*3.0/9);
+        init.SO=Math.round(IP*(isSP?7.0:8.0)/9);
+        init.L=Math.round(W*(isSP?0.88:0.60));
+      }
+    }
+    p.init=init;pool[id]=p;return{...s,pool};
+  });
   const updateTeamName=(id,name)=>setState(s=>({...s,teams:s.teams.map(t=>t.id===id?{...t,name}:t)}));
   const applyOverall=(id,rank)=>setState(s=>{const pool={...s.pool};const p={...pool[id]};const base=RANK_VAL[rank]??63;(p.kind==="bat"?["contact","power","eye","speed"]:["stuff","control","stamina"]).forEach(f=>p[f]=clamp(base+Math.round(randn()*8),1,99));pool[id]=p;return{...s,pool};});
   const updatePitch=(id,idx,field,val)=>setState(s=>{const pool={...s.pool};const p={...pool[id],pitches:[...pool[id].pitches]};p.pitches[idx]={...p.pitches[idx],[field]:val};pool[id]=p;return {...s,pool};});
@@ -1582,7 +1623,7 @@ export default function App(){
               </div>
               <div style={S.scrollX}><table style={{...S.statTable,borderCollapse:"collapse",fontFamily:"'Roboto Mono',monospace",fontSize:12}}><tbody>
                 <tr style={S.th}><td style={{...S.tl,minWidth:80}}></td>{[1,2,3,4,5,6,7,8,9].map(n=><td key={n} style={{textAlign:"center",width:28}}>{n}</td>)}<td style={{textAlign:"center",width:36,color:accent}}>計</td></tr>
-                <tr style={{...S.tr,fontWeight:g=>g.winner===sg.away?700:400}}>
+                <tr style={{...S.tr}}>
                   <td style={{...S.tl,color:sg.winner===sg.away?accent:"#d8e0d8",fontWeight:sg.winner===sg.away?700:400}}>{sg.away}</td>
                   {innings9(sg.ai).map((r,i)=><td key={i} style={{textAlign:"center",color:r>0?"#d8e0d8":"#555"}}>{r}</td>)}
                   <td style={{textAlign:"center",color:accent,fontWeight:700}}>{sg.awayRuns}</td>
@@ -1594,12 +1635,47 @@ export default function App(){
                 </tr>
               </tbody></table></div>
               {sg.winner==="引き分け"&&<div style={{fontSize:11,color:"#7a8a7a",marginTop:4}}>引き分け（延長12回）</div>}
+              <div style={{display:"flex",gap:16,marginTop:8,fontSize:11,color:"#7a8a7a",flexWrap:"wrap"}}>
+                {sg.wpName&&<span>勝: <span style={{color:"#a8e0a8"}}>{sg.wpName}</span></span>}
+                {sg.lpName&&<span>負: <span style={{color:"#e08080"}}>{sg.lpName}</span></span>}
+                {sg.svName&&<span>S: <span style={{color:accent}}>{sg.svName}</span></span>}
+              </div>
+              {(sg.awayBox||sg.homeBox)&&(()=>{
+                const BoxTable=({team,box})=>{
+                  if(!box)return null;
+                  const rows=Object.values(box).filter(r=>r.AB>0||r.BB>0);
+                  if(!rows.length)return null;
+                  return(<div style={{marginTop:8}}>
+                    <div style={{fontSize:10,color:"#5a7a5a",marginBottom:2}}>{team}</div>
+                    <table style={{...S.statTable,fontSize:11}}><tbody>
+                      <tr style={S.th}><td style={{...S.tl,minWidth:80}}>打者</td><td style={{textAlign:"right",width:30}}>打数</td><td style={{textAlign:"right",width:30}}>安打</td><td style={{textAlign:"right",width:30}}>二塁</td><td style={{textAlign:"right",width:30}}>本塁</td><td style={{textAlign:"right",width:30}}>打点</td><td style={{textAlign:"right",width:30}}>四球</td><td style={{textAlign:"right",width:30}}>三振</td></tr>
+                      {rows.map((r,i)=><tr key={i} style={i%2===0?S.tr:S.tr2}>
+                        <td style={S.tl}>{r.name}</td>
+                        <td style={{textAlign:"right"}}>{r.AB}</td>
+                        <td style={{textAlign:"right",color:r.H>0?"#a8e0a8":"#888"}}>{r.H}</td>
+                        <td style={{textAlign:"right",color:r._2B>0?"#c8c870":"#888"}}>{r._2B||0}</td>
+                        <td style={{textAlign:"right",color:r.HR>0?accent:"#888"}}>{r.HR}</td>
+                        <td style={{textAlign:"right"}}>{r.RBI}</td>
+                        <td style={{textAlign:"right"}}>{r.BB}</td>
+                        <td style={{textAlign:"right",color:r.SO>2?"#e08080":"#888"}}>{r.SO}</td>
+                      </tr>)}
+                    </tbody></table>
+                  </div>);
+                };
+                return(<div style={S.scrollX}>
+                  <BoxTable team={sg.away} box={sg.awayBox}/>
+                  <BoxTable team={sg.home} box={sg.homeBox}/>
+                </div>);
+              })()}
             </div>}
             <div style={S.logWrap}>{filteredLog.map((g,i)=>(<div key={i} style={{...S.logRow,cursor:"pointer",background:sg?.gameNo===g.gameNo?"#1a2a20":undefined}} onClick={()=>setSelectedGame(sg?.gameNo===g.gameNo?null:g)}>
               <span style={S.logNo}>#{g.gameNo}</span>
               <span style={{...S.logTeam,fontWeight:g.winner===g.away?700:400,color:g.winner===g.away?accent:"#aaa"}}>{g.away}</span>
               <span style={S.logScore}>{g.awayRuns} - {g.homeRuns}</span>
               <span style={{...S.logTeam,fontWeight:g.winner===g.home?700:400,color:g.winner===g.home?accent:"#aaa"}}>{g.home}</span>
+              <span style={{fontSize:10,color:"#5a7a5a",marginLeft:4,whiteSpace:"nowrap"}}>
+                {g.wpName&&`勝:${g.wpName}`}{g.svName&&` S:${g.svName}`}
+              </span>
             </div>))}</div>
           </div>);
         })()}
