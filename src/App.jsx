@@ -254,11 +254,11 @@ function batterEventProbs(b,factor,form){const c=norm(b.contact),p=norm(b.power)
   let bb=clamp(0.030+e*0.065,0.018,0.115)*Math.sqrt(clamp(factor,0.7,1.3)*fm);
   let hbp=0.007;
   let k=clamp(0.21-c*0.12,0.085,0.27)*clamp(fk,0.6,1.5);
-  const hitCap=historic?1.18:1.13;
-  const hitBase=clamp(0.205+c*0.145,0.162,0.380)*clamp(fhit,0.6,hitCap);
-  // HRはNPB水準（平均8-12本、チーム100-120本、エリート30-40本）
-  const hrBase=historic?(0.010+p*0.085):(0.005+p*0.062);
-  let hr=clamp(hrBase,0.002,historic?0.095:0.080)*clamp(fhit,0.55,historic?1.85:1.70);
+  const hitCap=historic?1.14:1.09;
+  const hitBase=clamp(0.185+c*0.130,0.148,0.355)*clamp(fhit,0.6,hitCap);
+  // HRはNPB水準（チーム90-120本、エリート25-35本）
+  const hrBase=historic?(0.009+p*0.078):(0.004+p*0.052);
+  let hr=clamp(hrBase,0.002,historic?0.090:0.072)*clamp(fhit,0.55,historic?1.80:1.65);
   let triple=0.0025*clamp(fhit,0.6,1.5);                               // 三塁打は稀
   let dbl=hitBase*0.185;
   let sgl=Math.max(0,hitBase-hr-triple-dbl);
@@ -267,7 +267,7 @@ function batterEventProbs(b,factor,form){const c=norm(b.contact),p=norm(b.power)
 function pushWalk(bases){if(bases[0]&&bases[1]&&bases[2])return 1;if(bases[0]&&bases[1]){bases[2]=true;return 0;}if(bases[0]){bases[1]=true;return 0;}bases[0]=true;return 0;}
 function simInning(ls,batStat,getProbs,gameBox){let outs=0,bases=[false,false,false],runs=0,safety=0;
   while(outs<3&&safety<60){safety++;const b=ls.next();const st=batStat[b.id];
-    const gb=gameBox?(gameBox[b.id]||(gameBox[b.id]={name:b.name,AB:0,H:0,_2B:0,HR:0,BB:0,RBI:0,SO:0})):null;
+    const gb=gameBox?(gameBox[b.id]||(gameBox[b.id]={name:b.name,pos:b.position||"DH",AB:0,H:0,_2B:0,HR:0,BB:0,RBI:0,SO:0})):null;
     const pr=getProbs(b);const x=rnd();let cum=0;if(st)st.PA++;
     cum+=pr.k;if(x<cum){if(st){st.AB++;st.SO++;}if(gb){gb.AB++;gb.SO++;}outs++;continue;}
     cum+=pr.out;if(x<cum){if(st)st.AB++;if(gb)gb.AB++;if(bases[0]&&outs<2&&rnd()<0.12){outs+=2;bases[0]=false;}else{outs++;if(bases[2]&&outs<3&&rnd()<0.25){runs++;bases[2]=false;if(st)st.RBI++;if(gb)gb.RBI++;}}continue;}
@@ -359,18 +359,19 @@ function teamGame(off,def,pool,batStat,pitStat,gameNo){
   shuffledBench.forEach(b=>{ const st=batStat[b.id]; if(!st)return;
     st.games++;
     const role=rnd();
-    if(role<0.55){ // 代打：1打席。簡易に確率処理
+    if(role<0.55){ // 代打：1打席
       st.PA++; const pr=batterEventProbs(b,1.0,st.form); const x=rnd();
-      if(x<pr.k){st.AB++;st.SO++;}
-      else if(x<pr.k+pr.bb){st.BB++;}
-      else if(x<pr.k+pr.bb+pr.hr){st.AB++;st.H++;st.HR++;st.RBI++;st.R++;}
-      else if(x<pr.k+pr.bb+pr.hr+pr.dbl){st.AB++;st.H++;st._2B++;}
-      else if(x<pr.k+pr.bb+pr.hr+pr.dbl+pr.sgl){st.AB++;st.H++;}
-      else {st.AB++;}
+      const gb=gameBox?(gameBox[b.id]||(gameBox[b.id]={name:b.name,pos:"代打",AB:0,H:0,_2B:0,HR:0,BB:0,RBI:0,SO:0})):null;
+      if(x<pr.k){st.AB++;st.SO++;if(gb){gb.AB++;gb.SO++;}}
+      else if(x<pr.k+pr.bb){st.BB++;if(gb)gb.BB++;}
+      else if(x<pr.k+pr.bb+pr.hr){st.AB++;st.H++;st.HR++;st.RBI++;st.R++;if(gb){gb.AB++;gb.H++;gb.HR++;gb.RBI++;}}
+      else if(x<pr.k+pr.bb+pr.hr+pr.dbl){st.AB++;st.H++;st._2B++;if(gb){gb.AB++;gb.H++;gb._2B++;}}
+      else if(x<pr.k+pr.bb+pr.hr+pr.dbl+pr.sgl){st.AB++;st.H++;if(gb){gb.AB++;gb.H++;}}
+      else{st.AB++;if(gb)gb.AB++;}
     } else if(role<0.75){ // 代走：打席なし、稀に盗塁
       if(norm(b.speed)>0.35&&rnd()<norm(b.speed)*0.60)st.SB++;
     }
-    // 残りは守備固め：出場のみ（games++済み）、打席なし
+    // 残りは守備固め：出場のみ
   });
   let closerPitched=null;
   const pitBox=[]; // [{name, ip, h, er, bb, so}] 登板順
@@ -386,10 +387,10 @@ function teamGame(off,def,pool,batStat,pitStat,gameNo){
     const longR=mid.filter(p=>p.rotation>ROTATION_RP_MIN+1).sort((a,b)=>a.rotation-b.rotation);
     const targetN=remain<=2?1+(rnd()<0.50?1:0):remain<=4?2+(rnd()<0.50?1:0):3+(rnd()<0.40?1:0);
     const relievers=[];
-    if(runs<=3){
+    if(runs<=4){
       const src=setup.length?setup:mid;
       for(let i=0;i<Math.min(targetN,src.length);i++){if(i===0||rnd()<(i===1?0.65:0.45))relievers.push(src[i]);}
-      if(closer&&rnd()<0.90){relievers.push(closer);closerPitched=closer;}
+      if(closer&&rnd()<0.92){relievers.push(closer);closerPitched=closer;}
     }else{
       const src=longR.length?longR:mid;const sh=[...src].sort(()=>rnd()-0.5);
       relievers.push(...sh.slice(0,Math.min(targetN,sh.length)));
@@ -1656,9 +1657,10 @@ export default function App(){
                   return(<div style={{marginTop:8}}>
                     <div style={{fontSize:10,color:"#5a7a5a",marginBottom:2}}>{team} 打撃</div>
                     <table style={{...S.statTable,fontSize:11}}><tbody>
-                      <tr style={S.th}><td style={{...S.tl,minWidth:80}}>打者</td><td style={{textAlign:"right",width:30}}>打数</td><td style={{textAlign:"right",width:30}}>安打</td><td style={{textAlign:"right",width:30}}>二塁</td><td style={{textAlign:"right",width:30}}>本塁</td><td style={{textAlign:"right",width:30}}>打点</td><td style={{textAlign:"right",width:30}}>四球</td><td style={{textAlign:"right",width:30}}>三振</td></tr>
+                      <tr style={S.th}><td style={{...S.tl,minWidth:80}}>打者</td><td style={{textAlign:"center",width:36}}>守位</td><td style={{textAlign:"right",width:30}}>打数</td><td style={{textAlign:"right",width:30}}>安打</td><td style={{textAlign:"right",width:30}}>二塁</td><td style={{textAlign:"right",width:30}}>本塁</td><td style={{textAlign:"right",width:30}}>打点</td><td style={{textAlign:"right",width:30}}>四球</td><td style={{textAlign:"right",width:30}}>三振</td></tr>
                       {rows.map((r,i)=><tr key={i} style={i%2===0?S.tr:S.tr2}>
                         <td style={S.tl}>{r.name}</td>
+                        <td style={{textAlign:"center",color:r.pos==="代打"?"#c8c870":"#7a9a7a",fontSize:10}}>{r.pos||""}</td>
                         <td style={{textAlign:"right"}}>{r.AB}</td>
                         <td style={{textAlign:"right",color:r.H>0?"#a8e0a8":"#888"}}>{r.H}</td>
                         <td style={{textAlign:"right",color:r._2B>0?"#c8c870":"#888"}}>{r._2B||0}</td>
