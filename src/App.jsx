@@ -673,12 +673,12 @@ function processOffseason(state,season,draftPicks){const {teams,pool,career,hall
       const great=p.kind==="bat"?perf>=120:perf>=140;
       if(!good && rnd()<0.30){ // 不振：解雇（NPB水準：約3割が退団）
         p.status="released_foreign"; removeFromTeam(teams,p); news.release.push(`${tm.name} ${p.name}（助っ人）退団`);
-      } else if(great){ // 大活躍：MLB復帰/好条件流出（在籍2年超で少し確率が上がる程度）
+      } else if(great){ // 大活躍：MLB復帰/好条件流出
         const leave=0.10+Math.min(0.10,p.yearsOnTeam*0.03);
-        if(rnd()<leave){ p.status="released_foreign"; removeFromTeam(teams,p); news.overseas.push(`${p.name}（助っ人）大活躍でMLB/好条件移籍`); }
+        if(rnd()<leave){ p.status="released_foreign"; removeFromTeam(teams,p); news.release.push(`${p.name}（助っ人）大活躍でMLB/好条件移籍`); }
       } else if(good){ // 並の活躍：契約満了ベースで流出（低確率）
         const leave=0.04+Math.min(0.08,p.yearsOnTeam*0.02);
-        if(rnd()<leave){ p.status="released_foreign"; removeFromTeam(teams,p); news.overseas.push(`${p.name}（助っ人）契約満了で退団`); }
+        if(rnd()<leave){ p.status="released_foreign"; removeFromTeam(teams,p); news.release.push(`${p.name}（助っ人）契約満了で退団`); }
       }
     });
   });
