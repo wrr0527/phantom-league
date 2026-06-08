@@ -530,7 +530,7 @@ function midSeasonSwap(teams,pool,batStat,pitStat,seasonNews){
       const prob=gap>25?0.20:gap>10?0.45:0.65;
       if(rnd()<prob){
         down.farm=true;
-        if(down.rotation>=1&&down.rotation<=ROTATION_SIZE) down.rotation=0;
+        down.rotation=0; // SP/RP問わず2軍降格時はrotationをリセット
         up.farm=false;
         if(up.rotation===0) up.rotation=ROTATION_RP_MIN;
         if(seasonNews){seasonNews.push({type:"swap",text:`${down.name}（投）2軍降格 → ${up.name} 昇格【${teams.find(t=>t.id===down.teamId)?.name||""}】`});}
@@ -840,6 +840,8 @@ function importLeague(text){UID=0;const teams=[];const pool={};let cur=null;cons
 // processOffseason後やmigrate後に呼び、farm/rotation の整合性を保つ
 function fixPitcherRotations(teams,pool){
   teams.forEach(tm=>{
+    // farm=trueなのにrotation>0の不整合を先にクリア（復元時・オフシーズン後の防衛策）
+    tm.pitcherIds.map(id=>pool[id]).filter(p=>p&&p.farm&&p.rotation!==0).forEach(p=>{p.rotation=0;});
     const used={};
     tm.pitcherIds.map(id=>pool[id]).filter(p=>p&&!p.farm&&p.rotation>0).forEach(p=>{used[p.rotation]=true;});
     tm.pitcherIds.map(id=>pool[id]).filter(p=>p&&!p.farm&&p.rotation===0).forEach(p=>{
