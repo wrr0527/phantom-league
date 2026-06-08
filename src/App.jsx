@@ -999,19 +999,24 @@ export default function App(){
     const topP=(key,dir=1,minIP=0,role=null)=>pStats.filter(s=>s.IP>=minIP&&(!role||s.role===role)).reduce((b,s)=>!b||(dir===1?s[key]>b[key]:s[key]<b[key])?s:b,null);
     const mk3=(v,decimals=3)=>isFinite(v)?Number(v.toFixed(decimals)):0;
     const allR=Object.values(pendingSeason.record).map(r=>({name:r.name,league:r.league,W:r.W,L:r.L,D:r.D||0,PCT:r.W/Math.max(1,r.W+r.L)}));
+    const bWAR=s=>(s.wRCp-80)*s.PA/QUAL_PA/20;
+    const pWAR=s=>Math.max(0,(3.80-s.FIP)/9*s.IP*0.28);
+    const lgMVP=(lg)=>{const winnerName=allR.filter(r=>r.league===lg).sort((a,b)=>b.PCT-a.PCT)[0]?.name;if(!winnerName)return null;const cands=[...bStats.filter(s=>s.team===winnerName).map(s=>({name:s.name,war:bWAR(s)})),...pStats.filter(s=>s.team===winnerName).map(s=>({name:s.name,war:pWAR(s)}))];return cands.reduce((b,s)=>!b||s.war>b.war?s:b,null);};
     const hEntry={year,
       central:allR.filter(r=>r.league==="central").sort((a,b)=>b.PCT-a.PCT),
       pacific:allR.filter(r=>r.league==="pacific").sort((a,b)=>b.PCT-a.PCT),
       cs:pendingSeason.cs,
       japanSeries:pendingSeason.japanSeries,
       titles:{
-        batAvg:{name:topB('AVG',1,100)?.name,val:mk3(topB('AVG',1,100)?.AVG)},
+        batAvg:{name:topB('AVG',1,QUAL_PA)?.name,val:mk3(topB('AVG',1,QUAL_PA)?.AVG)},
         hr:{name:topB('HR')?.name,val:topB('HR')?.HR},
         rbi:{name:topB('RBI')?.name,val:topB('RBI')?.RBI},
         sb:{name:topB('SB')?.name,val:topB('SB')?.SB},
         wins:{name:topP('W',1,0,'SP')?.name,val:topP('W',1,0,'SP')?.W},
-        era:{name:topP('ERA',-1,100)?.name,val:mk3(topP('ERA',-1,100)?.ERA,2)},
+        era:{name:topP('ERA',-1,QUAL_IP)?.name,val:mk3(topP('ERA',-1,QUAL_IP)?.ERA,2)},
         sv:{name:topP('SV',1,0,'RP')?.name,val:topP('SV',1,0,'RP')?.SV},
+        mvpC:{name:lgMVP("central")?.name,war:mk3(lgMVP("central")?.war,1)},
+        mvpP:{name:lgMVP("pacific")?.name,war:mk3(lgMVP("pacific")?.war,1)},
       }};
     if(!s.history) s.history=[];
     s.history=[hEntry,...s.history].slice(0,50); // 最大50シーズン保持
@@ -1134,10 +1139,17 @@ export default function App(){
       const ps=lg?pitchingStats.filter(s=>s.league===lg):pitchingStats;
       const topB=(key,dir=1,minPA=0)=>bs.filter(s=>s.PA>=minPA).reduce((b,s)=>!b||(dir===1?s[key]>b[key]:s[key]<b[key])?s:b,null);
       const topP=(key,dir=1,minIP=0,role=null)=>ps.filter(s=>s.IP>=minIP&&(!role||s.role===role)).reduce((b,s)=>!b||(dir===1?s[key]>b[key]:s[key]<b[key])?s:b,null);
-      return{batAvg:topB('AVG',1,100),hr:topB('HR'),rbi:topB('RBI'),sb:topB('SB'),wins:topP('W',1,0,'SP'),era:topP('ERA',-1,100),sv:topP('SV',1,0,'RP')};
+      const winnerName=lg?standings[lg]?.[0]?.name:null;
+      const bWAR=s=>(s.wRCp-80)*s.PA/QUAL_PA/20;
+      const pWAR=s=>Math.max(0,(3.80-s.FIP)/9*s.IP*0.28);
+      const mvp=winnerName?(()=>{
+        const cands=[...bs.filter(s=>s.team===winnerName).map(s=>({...s,war:bWAR(s)})),...ps.filter(s=>s.team===winnerName).map(s=>({...s,war:pWAR(s)}))];
+        return cands.reduce((b,s)=>!b||s.war>b.war?s:b,null);
+      })():null;
+      return{batAvg:topB('AVG',1,QUAL_PA),hr:topB('HR'),rbi:topB('RBI'),sb:topB('SB'),wins:topP('W',1,0,'SP'),era:topP('ERA',-1,QUAL_IP),sv:topP('SV',1,0,'RP'),mvp};
     };
     return{central:mkTitles("central"),pacific:mkTitles("pacific")};
-  },[result,battingStats,pitchingStats]);
+  },[result,battingStats,pitchingStats,standings]);
 
   const AbilityInput=({id,field,value})=>useRank?<select style={S.rankIn} value={valToRank(value)} onChange={e=>updateAbility(id,field,e.target.value)}>{RANKS.map(r=><option key={r} value={r}>{r}</option>)}</select>:<input style={S.numIn} type="number" value={value} onChange={e=>updateAbility(id,field,e.target.value)} />;
 
@@ -1161,7 +1173,7 @@ export default function App(){
           const sp1=t.pitcherIds.map(id=>state.pool[id]).filter(p=>p&&!p.farm&&p.role==="SP"&&p.rotation>=1&&p.rotation<=ROTATION_SIZE).length;
           const registered=bat1+pit1;
           const bench=bat1+(pit1-Math.max(0,sp1-1));
-          const foreignCount=[...t.batterIds,...t.pitcherIds].filter(id=>state.pool[id]?.foreign&&!state.pool[id]?.farm).length;
+          const foreignCount=[...t.batterIds,...t.pitcherIds].filter(id=>{const p=state.pool[id];return p?.foreign&&!p?.farm&&!(p.kind==="pit"&&p.rotation===0);}).length;
           const foreignOver=foreignCount>FOREIGN_ON_FIELD;
           return{id:t.id,name:t.name,missingOrders,dupOrders,missingPos,dupPos,
             regOver:registered>ROSTER_31,benchOver:bench>BENCH_26,foreignCount,foreignOver,
@@ -1246,7 +1258,7 @@ export default function App(){
             const bench=bat1+(pit1-Math.max(0,sp1-1));
             const regOver=registered>ROSTER_31;
             const benchOver=bench>BENCH_26;
-            const foreignCount=[...t.batterIds,...t.pitcherIds].filter(id=>state.pool[id]?.foreign&&!state.pool[id]?.farm).length;
+            const foreignCount=[...t.batterIds,...t.pitcherIds].filter(id=>{const p=state.pool[id];return p?.foreign&&!p?.farm&&!(p.kind==="pit"&&p.rotation===0);}).length;
             const foreignOver=foreignCount>FOREIGN_ON_FIELD;
             const errs=window._teamErrs&&window._teamErrs.find(e=>e.id===t.id);
             const warnItems=[];
@@ -1422,7 +1434,7 @@ export default function App(){
               <div key={lg} style={{marginBottom:10}}>
                 <div style={{fontSize:11,color:"#7a8a7a",marginBottom:4,letterSpacing:1}}>{label}</div>
                 <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-                  {[["首位打者",titles[lg]?.batAvg?.name,titles[lg]?.batAvg?f3(titles[lg].batAvg.AVG):""],["本塁打王",titles[lg]?.hr?.name,`${titles[lg]?.hr?.HR||0}本`],["打点王",titles[lg]?.rbi?.name,`${titles[lg]?.rbi?.RBI||0}打点`],["盗塁王",titles[lg]?.sb?.name,`${titles[lg]?.sb?.SB||0}盗塁`],["最多勝",titles[lg]?.wins?.name,`${titles[lg]?.wins?.W||0}勝`],["最優秀防御率",titles[lg]?.era?.name,titles[lg]?.era?f2(titles[lg].era.ERA):""],["最多セーブ",titles[lg]?.sv?.name,`${titles[lg]?.sv?.SV||0}S`]].map(([label2,name,val])=>name&&(
+                  {[["MVP（優勝チーム）",titles[lg]?.mvp?.name,titles[lg]?.mvp?`WAR ${Number((titles[lg].mvp.war||0).toFixed(1))}`:""],[" ","",""],["首位打者",titles[lg]?.batAvg?.name,titles[lg]?.batAvg?f3(titles[lg].batAvg.AVG):""],["本塁打王",titles[lg]?.hr?.name,`${titles[lg]?.hr?.HR||0}本`],["打点王",titles[lg]?.rbi?.name,`${titles[lg]?.rbi?.RBI||0}打点`],["盗塁王",titles[lg]?.sb?.name,`${titles[lg]?.sb?.SB||0}盗塁`],["最多勝",titles[lg]?.wins?.name,`${titles[lg]?.wins?.W||0}勝`],["最優秀防御率",titles[lg]?.era?.name,titles[lg]?.era?f2(titles[lg].era.ERA):""],["最多セーブ",titles[lg]?.sv?.name,`${titles[lg]?.sv?.SV||0}S`]].map(([label2,name,val])=>name&&name!==" "&&(
                     <div key={label2} style={{background:bg,border:`1px solid ${border}`,borderRadius:4,padding:"5px 10px",minWidth:120}}>
                       <div style={{fontSize:10,color:"#5a7a7a",marginBottom:2}}>{label2}</div>
                       <div style={{fontSize:12,color:"#d8e0d8",fontWeight:600}}>{name}</div>
@@ -1714,7 +1726,9 @@ export default function App(){
                   </div>
                 ))}
                 {h.titles&&<div style={{minWidth:200}}>
-                  <div style={{fontSize:11,color:"#7a8a7a",marginBottom:4}}>タイトル</div>
+                  <div style={{fontSize:11,color:"#7a8a7a",marginBottom:4}}>MVP・タイトル</div>
+                  {h.titles.mvpC?.name&&<div style={{fontSize:12,color:accent,fontFamily:"'Roboto Mono',monospace",fontWeight:600}}>MVP(C): {h.titles.mvpC.name} (WAR{h.titles.mvpC.war})</div>}
+                  {h.titles.mvpP?.name&&<div style={{fontSize:12,color:"#6ab3e0",fontFamily:"'Roboto Mono',monospace",fontWeight:600}}>MVP(P): {h.titles.mvpP.name} (WAR{h.titles.mvpP.war})</div>}
                   {[["首位打者",h.titles.batAvg?.name,h.titles.batAvg?.val?String(h.titles.batAvg.val).replace(/^0/,""):"-"],["本塁打",h.titles.hr?.name,`${h.titles.hr?.val||0}本`],["最多勝",h.titles.wins?.name,`${h.titles.wins?.val||0}勝`],["防御率",h.titles.era?.name,h.titles.era?.val||"-"],["S",h.titles.sv?.name,`${h.titles.sv?.val||0}S`]].map(([label,name,val])=>name&&<div key={label} style={{fontSize:12,color:"#c0c8c0",fontFamily:"'Roboto Mono',monospace"}}>{label}: {name} ({val})</div>)}
                 </div>}
               </div>
