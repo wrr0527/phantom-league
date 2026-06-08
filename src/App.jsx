@@ -848,17 +848,17 @@ function fixPitcherRotations(teams,pool){
     tm.pitcherIds.map(id=>pool[id]).filter(p=>p&&!p.farm&&p.rotation>0)
       .sort((a,b)=>abil(b)-abil(a)) // 能力高い順に処理し、高い方を優先して保持
       .forEach(p=>{if(seen[p.rotation])p.rotation=0;else seen[p.rotation]=true;});
-    // Step3: farm=false で rotation===0 → 空きスロットに割り当て
+    // Step3: farm=false で rotation===0 → 空きスロットに割り当て（満員なら二軍に戻す）
     const used={};
     tm.pitcherIds.map(id=>pool[id]).filter(p=>p&&!p.farm&&p.rotation>0).forEach(p=>{used[p.rotation]=true;});
     tm.pitcherIds.map(id=>pool[id]).filter(p=>p&&!p.farm&&p.rotation===0).forEach(p=>{
       if(p.role==="SP"){
         let s=1;while(used[s]&&s<=ROTATION_SIZE)s++;
-        if(s<=ROTATION_SIZE){p.rotation=s;used[s]=true;}else{p.rotation=ROTATION_RP_MIN;used[ROTATION_RP_MIN]=true;}
+        if(s<=ROTATION_SIZE){p.rotation=s;used[s]=true;}
+        else{let r=ROTATION_RP_MIN;while(used[r]&&r<=ROTATION_RP_MAX)r++;if(r<=ROTATION_RP_MAX){p.rotation=r;used[r]=true;}else p.farm=true;}
       }else{
         let s=ROTATION_RP_MIN;while(used[s]&&s<=ROTATION_RP_MAX)s++;
-        p.rotation=Math.min(s,ROTATION_RP_MAX);
-        used[p.rotation]=true;
+        if(s<=ROTATION_RP_MAX){p.rotation=s;used[s]=true;}else p.farm=true; // 満員なら二軍
       }
     });
   });
