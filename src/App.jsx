@@ -404,7 +404,7 @@ function teamGame(off,def,pool,batStat,pitStat,gameNo){
   return {runs, innings, sp:usedSP, closer:closerPitched, box:gameBox, pitBox};
 }
 
-function rollInjury(){const r=rnd();if(r<0.70)return GAMES;if(r<0.83)return Math.floor(GAMES*(0.75+rnd()*0.22));if(r<0.95)return Math.floor(GAMES*(0.42+rnd()*0.28));return Math.floor(GAMES*(0.08+rnd()*0.28));}
+function rollInjury(){const r=rnd();if(r<0.78)return GAMES;if(r<0.89)return Math.floor(GAMES*(0.75+rnd()*0.22));if(r<0.97)return Math.floor(GAMES*(0.42+rnd()*0.28));return Math.floor(GAMES*(0.08+rnd()*0.28));}
 
 // 3試合1カード形式のスケジュール（NPB準拠）
 // リーグ内：各ペア8カード×3試合=24試合（5相手×24=120試合/チーム）
@@ -537,8 +537,8 @@ function midSeasonSwap(teams,pool,batStat,pitStat,seasonNews){
     }
   });
 
-  // ── シーズン中トレード（チーム間） ──────────────────
-  const tradeThisCall = rnd()<0.70 ? (rnd()<0.55?2:1) : 0;
+  // ── シーズン中トレード（チーム間）：NPB水準に抑制 ─────
+  const tradeThisCall = rnd()<0.18 ? 1 : 0; // シーズン全体で3-4件程度
   for(let t=0;t<tradeThisCall;t++){
     const shuffled=[...teams].sort(()=>rnd()-0.5);
     const t1=shuffled[0],t2=shuffled[1];
@@ -601,7 +601,7 @@ function simulateSeason(teams,pool){const batStat={},pitStat={};
   const seasonNews=[];
   teams.forEach(tm=>{
     tm.batterIds.forEach(id=>{const b=pool[id];const maxG=rollInjury();if(maxG<GAMES*0.7){seasonNews.push({type:"injury",text:`【開幕前離脱】${b.name}（${tm.name}）故障 ※出場上限${maxG}試合`});}batStat[id]={id,name:b.name,team:tm.name,teamId:tm.id,age:b.age,games:0,maxGames:maxG,form:rollForm(),PA:0,AB:0,H:0,_2B:0,_3B:0,HR:0,BB:0,HBP:0,SO:0,RBI:0,R:0,SB:0};});
-    tm.pitcherIds.forEach(id=>{const p=pool[id];let inj=1;const r=rnd();if(r<0.05)inj=0.5;else if(r<0.11)inj=0.75;if(inj<1){seasonNews.push({type:"injury",text:`【開幕前離脱】${p.name}（${tm.name}）故障 ※登板数${Math.round(inj*100)}%制限`});}const baseMaxG=p.role==="SP"?30:50+Math.floor(rnd()*25);pitStat[id]={id,name:p.name,team:tm.name,teamId:tm.id,age:p.age,role:p.role,IP:0,H:0,HR:0,BB:0,SO:0,ER:0,W:0,L:0,SV:0,G:0,maxG:Math.floor(baseMaxG*inj),injuryFactor:inj,form:rollForm()};});
+    tm.pitcherIds.forEach(id=>{const p=pool[id];let inj=1;const r=rnd();if(r<0.03)inj=0.5;else if(r<0.08)inj=0.75;if(inj<1){seasonNews.push({type:"injury",text:`【開幕前離脱】${p.name}（${tm.name}）故障 ※登板数${Math.round(inj*100)}%制限`});}const baseMaxG=p.role==="SP"?30:50+Math.floor(rnd()*25);pitStat[id]={id,name:p.name,team:tm.name,teamId:tm.id,age:p.age,role:p.role,IP:0,H:0,HR:0,BB:0,SO:0,ER:0,W:0,L:0,SV:0,G:0,maxG:Math.floor(baseMaxG*inj),injuryFactor:inj,form:rollForm()};});
   });
   const record={};teams.forEach(tm=>record[tm.id]={name:tm.name,league:tm.league,W:0,L:0,D:0,RS:0,RA:0,id:tm.id});
   const schedule=buildSchedule(teams);
@@ -670,7 +670,7 @@ function processOffseason(state,season,draftPicks){const {teams,pool,career,hall
       const perf=p.kind==="bat"?perfBat(id):perfPit(id);
       const good=p.kind==="bat"?perf>=105:perf>=110;
       const great=p.kind==="bat"?perf>=120:perf>=140;
-      if(!good && rnd()<0.45){ // 不振：解雇（NPB水準。半数以下が退団）
+      if(!good && rnd()<0.30){ // 不振：解雇（NPB水準：約3割が退団）
         p.status="released_foreign"; removeFromTeam(teams,p); news.release.push(`${tm.name} ${p.name}（助っ人）退団`);
       } else if(great){ // 大活躍：MLB復帰/好条件流出（在籍2年超で少し確率が上がる程度）
         const leave=0.10+Math.min(0.10,p.yearsOnTeam*0.03);
@@ -705,10 +705,10 @@ function processOffseason(state,season,draftPicks){const {teams,pool,career,hall
   let faDeclared=0;
   const faDeclaredPlayers=[];
   faEligible.forEach(p=>{
-    if(faDeclared>=6)return;
+    if(faDeclared>=10)return;
     const perf=p.kind==="bat"?perfBat(p.id):perfPit(p.id);
     const good=p.kind==="bat"?perf>=95:perf>=105;
-    const rate=good?0.25:0.06;
+    const rate=good?0.38:0.14;
     if(rnd()<rate){p.status="fa";const prevTeamId=p.teamId;removeFromTeam(teams,p);news.fa.push(`${p.name} FA宣言`);faDeclaredPlayers.push({p,prevTeamId});faDeclared++;}
   });
   // FA・自由契約選手の再契約（争奪戦）。好成績選手ほど強豪が獲得、不振選手は浪人もありうる
@@ -760,7 +760,7 @@ function processOffseason(state,season,draftPicks){const {teams,pool,career,hall
 
   // トレード：球団間で選手を交換（NPB年15-30件）。控え〜準主力を1対1で交換
   const tradePerf=(p)=>{const m=p.kind==="bat"?perfBat(p.id):perfPit(p.id);return m;};
-  let tradeCount=0; const tradeTarget=5+Math.floor(rnd()*6); // 年5-10件（NPB水準）
+  let tradeCount=0; const tradeTarget=2+Math.floor(rnd()*4); // 年2-5件（オフシーズン分）
   let tradeGuard=0;
   while(tradeCount<tradeTarget && tradeGuard<200){
     tradeGuard++;
@@ -796,6 +796,8 @@ function processOffseason(state,season,draftPicks){const {teams,pool,career,hall
       rps.slice().sort((a,b)=>(b.stuff+b.control+b.stamina)-(a.stuff+a.control+a.stamina))[0].rotation=ROTATION_CLOSER_MIN;
     }
   });
+  // 1軍(farm=false)なのにrotation=0の投手を修正（助っ人補充・ドラフト等で発生する不整合）
+  fixPitcherRotations(teams,pool);
   return news;}
 function mergeInit(p,career){const init=p.init||{};if(p.kind==="bat"){const c=career||emptyCareerBat();const m={};Object.keys(emptyCareerBat()).forEach(k=>m[k]=(c[k]||0)+(init[k]||0));m.name=p.name;m.id=p.id;return m;}const c=career||emptyCareerPit();const m={};Object.keys(emptyCareerPit()).forEach(k=>m[k]=(c[k]||0)+(init[k]||0));m.name=p.name;m.id=p.id;m.role=p.role;return m;}
 function summ(p,m){return p.kind==="bat"?`通算${m.HR}本`:`通算${m.W}勝`;}
@@ -832,6 +834,24 @@ function importLeague(text){UID=0;const teams=[];const pool={};let cur=null;cons
   const anyFarmSet=Object.values(pool).some(p=>p.farm);
   if(!anyFarmSet) assignFarm(teams,pool);
   return {teams,pool,career:{bat:{},pit:{}},hall:[]};}
+
+// 1軍(farm=false)なのにrotation=0の投手に適切な番手を割り当てる
+// processOffseason後やmigrate後に呼び、farm/rotation の整合性を保つ
+function fixPitcherRotations(teams,pool){
+  teams.forEach(tm=>{
+    const used={};
+    tm.pitcherIds.map(id=>pool[id]).filter(p=>p&&!p.farm&&p.rotation>0).forEach(p=>{used[p.rotation]=true;});
+    tm.pitcherIds.map(id=>pool[id]).filter(p=>p&&!p.farm&&p.rotation===0).forEach(p=>{
+      if(p.role==="SP"){
+        let s=1;while(used[s]&&s<=ROTATION_SIZE)s++;
+        if(s<=ROTATION_SIZE){p.rotation=s;used[s]=true;}else{p.rotation=ROTATION_RP_MIN;used[ROTATION_RP_MIN]=true;}
+      }else{
+        let s=ROTATION_RP_MIN;while(used[s]&&s<=ROTATION_RP_MAX)s++;
+        if(s<=ROTATION_RP_MAX){p.rotation=s;used[s]=true;}
+      }
+    });
+  });
+}
 
 function saveState(state,year){try{localStorage.setItem(STORAGE_KEY,JSON.stringify({v:SCHEMA_VERSION,state,year,UID}));}catch(e){}}
 // 読込時マイグレーション：欠けたフィールドを補完し、旧データでも壊れないようにする
@@ -875,10 +895,11 @@ function migrate(d){
   if(!st.hall) st.hall=[];
   if(!st.config) st.config={...DEFAULT_CONFIG};
   if(!st.history) st.history=[];
-  // 旧データにleagueが無ければ前半セ・後半パで割り当て、farm未設定なら再編
-  if(st.teams){ let needFarm=false; st.teams.forEach((tm,i)=>{ if(!tm.league) tm.league=i<st.teams.length/2?"central":"pacific"; });
-    Object.values(st.pool||{}).forEach(p=>{ if(p.farm===undefined) needFarm=true; });
-    if(needFarm) assignFarm(st.teams,st.pool); }
+  // 旧データにleagueが無ければ前半セ・後半パで割り当て
+  // ※ assignFarmは呼ばない（手動ローテ・1軍設定を保持するため）
+  if(st.teams){ st.teams.forEach((tm,i)=>{ if(!tm.league) tm.league=i<st.teams.length/2?"central":"pacific"; });
+    // 1軍なのにrotation=0の投手を修正（オフシーズン補充で発生しうる不整合）
+    fixPitcherRotations(st.teams,st.pool||{}); }
   return d;
 }
 function loadState(){try{const raw=localStorage.getItem(STORAGE_KEY);if(!raw)return null;let d=JSON.parse(raw);d=migrate(d);if(!d)return null;UID=d.UID||0;return d;}catch(e){return null;}}
@@ -972,12 +993,14 @@ export default function App(){
   const [teamBatSort,setTeamBatSort]=useState({key:"OPS",dir:-1});
   const [teamPitSort,setTeamPitSort]=useState({key:"ERA",dir:1});
   const [selectedGame,setSelectedGame]=useState(null);
+  const [runError,setRunError]=useState(null);
 
   useEffect(()=>{saveState(state,year);},[state,year]);
   const cloneState=(s)=>JSON.parse(JSON.stringify(s));
 
   // シーズン実行：年は進めない。結果を表示し、何度でも再実行できる
   const runOne=()=>{
+    setRunError(null);
     try{
       const r=simulateSeason(state.teams,state.pool);
       setResult(r);setPendingSeason(r);setNews(null);setTab("results");setStatTab("standings");
@@ -985,7 +1008,7 @@ export default function App(){
       if(url) syncToSheet(url,state,year,r).catch(()=>{});
     }catch(e){
       console.error(e);
-      alert("シミュレーションエラー: "+String(e?.message||e)+"\n\nコンソールを確認してください。");
+      setRunError(String(e?.message||e)+(e?.stack?`\n${e.stack.split("\n").slice(0,3).join("\n")}`:""));
     }
   };
   // 結果に納得→ドラフト画面へ進む
@@ -1039,11 +1062,25 @@ export default function App(){
       const HR=field==="HR"?Number(val):(init.HR||0);
       const seasons=field==="seasons"?Number(val):(init.seasons||0);
       if(H>0&&seasons>0){
-        const AB=Math.round(H/0.268);const PA=Math.round(AB/0.908);
-        init.AB=AB;init.PA=PA;init.BB=Math.round(PA*0.086);init.HBP=Math.round(PA*0.007);
-        init.SO=Math.round(AB*0.155);init._2B=Math.round((H-HR)*0.21);init._3B=Math.max(0,Math.round((H-HR)*0.012));
-        init.RBI=Math.round(HR*3.5+(H-HR)*0.44);init.R=Math.round((H+(init.BB||0))*0.37);
-        init.SB=Math.round((H-HR)*0.065);init.games=Math.round(seasons*118);
+        // 打率は1シーズン平均安打数から推計（高安打=高打率）
+        const hps=H/seasons;
+        const avgEst=clamp(0.240+(hps-90)*0.00065,0.225,0.340);
+        const AB=Math.round(H/avgEst);const PA=Math.round(AB/0.905);
+        init.AB=AB;init.PA=PA;
+        // 四球率：打力の高い選手ほど高め
+        const bbRate=clamp(0.076+(hps-90)*0.00018,0.060,0.130);
+        init.BB=Math.round(PA*bbRate);init.HBP=Math.round(PA*0.007);
+        // 三振率：安打の多い選手は低め
+        const soRate=clamp(0.160-(hps-90)*0.00030,0.115,0.220);
+        init.SO=Math.round(AB*soRate);
+        init._2B=Math.round((H-HR)*0.195);init._3B=Math.max(0,Math.round((H-HR)*0.010));
+        // 打点：HR 2.0点 + 非HR安打 0.42点（NPB水準）
+        init.RBI=Math.round(HR*2.0+(H-HR)*0.42);
+        // 得点：安打+四球から推計
+        init.R=Math.round(H*0.47+init.BB*0.30);
+        // 盗塁：安打数に応じた比率
+        init.SB=Math.round((H-HR)*clamp(0.040+(hps-90)*0.0008,0.015,0.120));
+        init.games=Math.round(seasons*120);
       }
     }else{
       const W=field==="W"?Number(val):(init.W||0);
@@ -1051,12 +1088,22 @@ export default function App(){
       const seasons=field==="seasons"?Number(val):(init.seasons||0);
       if(seasons>0){
         const isSP=p.role==="SP";
-        const IP=isSP?seasons*155:seasons*55;const G=isSP?seasons*25:seasons*55;
+        const gPerSeason=isSP?26:58; const ipPerSeason=isSP?160:58;
+        const IP=seasons*ipPerSeason;const G=seasons*gPerSeason;
         init.IP=Math.round(IP*10)/10;init.G=G;
-        init.ER=Math.round(IP*3.65/9);init.H=Math.round(IP*8.4/9);
-        init.HR=Math.round(IP*0.90/9);init.BB=Math.round(IP*3.0/9);
-        init.SO=Math.round(IP*(isSP?7.0:8.0)/9);
-        init.L=Math.round(W*(isSP?0.88:0.60));
+        // ERA：SP 3.55 / RP 3.45（NPB水準）
+        const era=isSP?3.55:3.45;
+        init.ER=Math.round(IP*era/9);
+        // 被安打：SP H/9=8.3 / RP H/9=7.9
+        init.H=Math.round(IP*(isSP?8.3:7.9)/9);
+        // 被本塁打：SP 0.85/9 / RP 0.75/9
+        init.HR=Math.round(IP*(isSP?0.85:0.75)/9);
+        // 与四球：SP 2.8/9 / RP 3.2/9
+        init.BB=Math.round(IP*(isSP?2.8:3.2)/9);
+        // 奪三振：SP 7.2/9 / RP 8.5/9
+        init.SO=Math.round(IP*(isSP?7.2:8.5)/9);
+        // 敗戦：SP は勝利の約0.85倍 / RP は0.55倍
+        init.L=Math.round(W*(isSP?0.85:0.55));
       }
     }
     p.init=init;pool[id]=p;return{...s,pool};
@@ -1192,6 +1239,7 @@ export default function App(){
         <button style={S.sheetBtn} onClick={()=>setSheetOpen(o=>!o)}>📊 シート</button>
         <button style={S.resetBtn} onClick={resetAll}>RESET</button>
       </nav>
+      {runError&&<div style={{background:"#3a1010",border:"1px solid #cc4444",borderRadius:6,padding:"8px 12px",margin:"6px 12px 0",color:"#ff9999",fontSize:12,whiteSpace:"pre-wrap",fontFamily:"monospace"}}>⚠ シミュレーションエラー：{runError}</div>}
 
       {ioOpen && (<div style={S.ioWrap}>
         <div style={S.note}>1行1選手。能力はA〜Gでも1〜99でもOK。球種は<code style={S.code}>|</code>区切り。<br/>
