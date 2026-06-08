@@ -273,7 +273,7 @@ function simInning(ls,batStat,getProbs,gameBox){let outs=0,bases=[false,false,fa
     cum+=pr.out;if(x<cum){if(st)st.AB++;if(gb)gb.AB++;if(bases[0]&&outs<2&&rnd()<0.12){outs+=2;bases[0]=false;}else{outs++;if(bases[2]&&outs<3&&rnd()<0.25){runs++;bases[2]=false;if(st)st.RBI++;if(gb)gb.RBI++;}}continue;}
     cum+=pr.bb;if(x<cum){if(st)st.BB++;if(gb)gb.BB++;const r=pushWalk(bases);runs+=r;if(st){st.RBI+=r;if(!bases[1]&&norm(b.speed)>0.40&&rnd()<norm(b.speed)*0.22)st.SB++;}if(gb)gb.RBI+=r;continue;}
     cum+=pr.hbp;if(x<cum){if(st)st.HBP++;const r=pushWalk(bases);runs+=r;if(st)st.RBI+=r;if(gb)gb.RBI+=r;continue;}
-    cum+=pr.hr;if(x<cum){const r=1+(bases[0]?1:0)+(bases[1]?1:0)+(bases[2]?1:0);bases=[false,false,false];runs+=r;if(st){st.AB++;st.H++;st.HR++;st.RBI+=r;st.R++;}if(gb){gb.AB++;gb.H++;gb.HR++;gb.RBI+=r;}continue;}
+    cum+=pr.hr;if(x<cum){const r=1+(bases[0]?1:0)+(bases[1]?1:0)+(bases[2]?1:0);bases=[false,false,false];runs+=r;if(st){st.AB++;st.H++;st.HR++;st.RBI+=r;st.R++;}if(gb){gb.AB++;gb.H++;gb.HR++;gb.RBI+=r;if(!gb._hrs)gb._hrs=[];const _t=r===1?"ソロ":r===2?"2ラン":r===3?"3ラン":"満塁";gb._hrs.push({name:b.name,no:st?st.HR:gb.HR,type:_t});}continue;}
     cum+=pr.triple;if(x<cum){const r=(bases[0]?1:0)+(bases[1]?1:0)+(bases[2]?1:0);bases=[false,false,true];runs+=r;if(st){st.AB++;st.H++;st._3B++;st.RBI+=r;}if(gb){gb.AB++;gb.H++;gb.RBI+=r;}continue;}
     cum+=pr.dbl;if(x<cum){let r=(bases[1]?1:0)+(bases[2]?1:0);let third=false;if(bases[0]){if(rnd()<0.45)r++;else third=true;}bases=[false,true,third];runs+=r;if(st){st.AB++;st.H++;st._2B++;st.RBI+=r;}if(gb){gb.AB++;gb.H++;gb._2B++;gb.RBI+=r;}continue;}
     {let r=bases[2]?1:0;let third=bases[1];if(bases[1]&&rnd()<0.55){r++;third=false;}bases=[true,bases[0],third];runs+=r;if(st){st.AB++;st.H++;st.RBI+=r;if(!bases[1]&&norm(b.speed)>0.35&&rnd()<norm(b.speed)*0.52)st.SB++;}if(gb){gb.AB++;gb.H++;gb.RBI+=r;}}
@@ -378,7 +378,7 @@ function teamGame(off,def,pool,batStat,pitStat,gameNo){
   if(usedSP&&pitStat[usedSP.id]){const ps=pitStat[usedSP.id];const f=ps.injuryFactor;const spIP=clamp(6.0*f*(0.80+norm(usedSP.stamina)*0.30),3.5,8);
     const spH=Math.round(runs*0.75+spIP*0.70);const spER=Math.round(runs*(spIP/9));const spBB=Math.max(0,Math.round(spIP*(0.34-norm(usedSP.control)*0.20)));const spSO=Math.round(spIP*(0.50+norm(effStuff(usedSP))*0.45)*clamp(spForm,0.8,1.5));
     ps.IP+=spIP;ps.G++;ps.ER+=spER;ps.SO+=spSO;ps.BB+=spBB;ps.H+=spH;if(rnd()<0.18)ps.HR++;
-    pitBox.push({name:usedSP.name,ip:Math.round(spIP*10)/10,h:spH,er:spER,bb:spBB,so:spSO});
+    pitBox.push({id:usedSP.id,name:usedSP.name,ip:Math.round(spIP*10)/10,h:spH,er:spER,bb:spBB,so:spSO});
     const remain=9-spIP;
     const notExhausted=p=>!pitStat[p.id]||pitStat[p.id].G<(pitStat[p.id].maxG??99);
     const closer=rp.find(p=>p.rotation>=ROTATION_CLOSER_MIN&&p.rotation<=ROTATION_CLOSER_MAX&&notExhausted(p));
@@ -399,9 +399,10 @@ function teamGame(off,def,pool,batStat,pitStat,gameNo){
     relievers.forEach(p=>{if(!pitStat[p.id])return;const seg=remain/Math.max(1,relievers.length);const rs=pitStat[p.id];
       const rH=Math.round(seg*0.92);const rER=Math.round((runs/9)*seg);const rBB=Math.max(0,Math.round(seg*(0.33-norm(p.control)*0.16)));const rSO=Math.round(seg*(0.60+norm(effStuff(p))*0.50));
       rs.IP+=seg;rs.G++;rs.ER+=rER;rs.SO+=rSO;rs.BB+=rBB;rs.H+=rH;
-      pitBox.push({name:p.name,ip:Math.round(seg*10)/10,h:rH,er:rER,bb:rBB,so:rSO});
+      pitBox.push({id:p.id,name:p.name,ip:Math.round(seg*10)/10,h:rH,er:rER,bb:rBB,so:rSO});
     });}
-  return {runs, innings, sp:usedSP, closer:closerPitched, box:gameBox, pitBox};
+  const hrEvents=Object.values(gameBox).flatMap(gb=>gb._hrs||[]);
+  return {runs, innings, sp:usedSP, closer:closerPitched, box:gameBox, pitBox, hrEvents};
 }
 
 function rollInjury(){const r=rnd();if(r<0.78)return GAMES;if(r<0.89)return Math.floor(GAMES*(0.75+rnd()*0.22));if(r<0.97)return Math.floor(GAMES*(0.42+rnd()*0.28));return Math.floor(GAMES*(0.08+rnd()*0.28));}
@@ -632,7 +633,7 @@ function simulateSeason(teams,pool){const batStat={},pitStat={};
     record[home.id].RS+=hR;record[home.id].RA+=aR;record[away.id].RS+=aR;record[away.id].RA+=hR;
     if(isDraw){record[home.id].D++;record[away.id].D++;}
     else if(hR>aR){record[home.id].W++;record[away.id].L++;}else{record[away.id].W++;record[home.id].L++;}
-    gameLog.push({gameNo:m.gameNo,home:home.name,away:away.name,homeRuns:hR,awayRuns:aR,winner:isDraw?"引き分け":hR>aR?home.name:away.name,hi:hRes.innings,ai:aRes.innings,wpName,lpName,svName,homeBox:hRes.box,awayBox:aRes.box,homePitBox:aRes.pitBox,awayPitBox:hRes.pitBox});});
+    gameLog.push({gameNo:m.gameNo,home:home.name,away:away.name,homeRuns:hR,awayRuns:aR,winner:isDraw?"引き分け":hR>aR?home.name:away.name,hi:hRes.innings,ai:aRes.innings,wpName,lpName,svName,homeBox:hRes.box,awayBox:aRes.box,homePitBox:aRes.pitBox,awayPitBox:hRes.pitBox,homeHRs:hRes.hrEvents,awayHRs:aRes.hrEvents});});
   // 両リーグ順位決定→CS→日本シリーズ
   const cl=Object.values(record).filter(r=>r.league==="central").sort((a,b)=>(b.W/Math.max(1,b.W+b.L))-(a.W/Math.max(1,a.W+a.L)));
   const pl=Object.values(record).filter(r=>r.league==="pacific").sort((a,b)=>(b.W/Math.max(1,b.W+b.L))-(a.W/Math.max(1,a.W+a.L)));
@@ -847,7 +848,8 @@ function fixPitcherRotations(teams,pool){
         if(s<=ROTATION_SIZE){p.rotation=s;used[s]=true;}else{p.rotation=ROTATION_RP_MIN;used[ROTATION_RP_MIN]=true;}
       }else{
         let s=ROTATION_RP_MIN;while(used[s]&&s<=ROTATION_RP_MAX)s++;
-        if(s<=ROTATION_RP_MAX){p.rotation=s;used[s]=true;}
+        p.rotation=Math.min(s,ROTATION_RP_MAX); // スロット満員でも最後尾に重複割当
+        used[p.rotation]=true;
       }
     });
   });
@@ -1668,96 +1670,122 @@ export default function App(){
           const filteredLog=result.gameLog.filter(g=>!logFilter||logFilter==="全試合"||g.home===logFilter||g.away===logFilter);
           const sg=selectedGame;
           const innings9=(arr)=>arr?arr.slice(0,9):[0,0,0,0,0,0,0,0,0];
-          return(<div>
-            <select style={{...S.numIn,width:"auto",marginBottom:8}} value={logFilter||"全試合"} onChange={e=>{setLogFilter(e.target.value==="全試合"?"":e.target.value);setSelectedGame(null);}}>
-              {logTeams.map(t=><option key={t} value={t}>{t}</option>)}
-            </select>
-            <span style={{fontSize:11,color:"#5a7a5a",marginLeft:8}}>{filteredLog.length}試合</span>
-            {sg&&<div style={{background:"#0f1a14",border:`1px solid ${accent}`,borderRadius:4,padding:"10px 14px",marginTop:8,marginBottom:4}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-                <span style={{fontSize:11,color:"#7a8a7a"}}>#{sg.gameNo} スコアボード</span>
-                <button style={{background:"transparent",color:"#888",border:"none",cursor:"pointer",fontSize:16}} onClick={()=>setSelectedGame(null)}>✕</button>
+          const totalGames=result.gameLog.length||828;
+          const MONTHS=['4月','5月','6月','7月','8月','9月'];
+          const monthOf=(gameNo)=>MONTHS[Math.min(5,Math.floor((gameNo-1)/totalGames*6))];
+          // 月別グループ化
+          const byMonth={};filteredLog.forEach(g=>{const m=monthOf(g.gameNo);if(!byMonth[m])byMonth[m]=[];byMonth[m].push(g);});
+
+          // スポナビ準拠スコアボード（インライン展開）
+          const Scoreboard=({g})=>{
+            const batStat=result?.batStat||{};const pitStat=result?.pitStat||{};
+            const avgOf=(id)=>{const s=batStat[id];return s&&s.AB>0?f3(s.H/s.AB):"---";};
+            const eraOf=(id)=>{const s=pitStat[id];return s&&s.IP>0?f2(s.ER*9/s.IP):"--";};
+            const BatTable=({team,box})=>{
+              if(!box)return null;
+              const rows=Object.entries(box).filter(([,r])=>r.AB>0||r.BB>0);
+              if(!rows.length)return null;
+              return(<div style={{marginTop:10}}>
+                <div style={{fontSize:10,color:"#5a7a5a",marginBottom:2,fontWeight:700,letterSpacing:1}}>{team} 打撃</div>
+                <div style={S.scrollX}><table style={{...S.statTable,fontSize:11}}><tbody>
+                  <tr style={S.th}><td style={{...S.tl,minWidth:80}}>打者</td><td style={{textAlign:"center",width:34,fontSize:9}}>守位</td><td style={{textAlign:"right",width:28}}>打数</td><td style={{textAlign:"right",width:28}}>安打</td><td style={{textAlign:"right",width:28}}>本塁</td><td style={{textAlign:"right",width:28}}>打点</td><td style={{textAlign:"right",width:28}}>四球</td><td style={{textAlign:"right",width:28}}>三振</td><td style={{textAlign:"right",width:38,color:"#7ec87e"}}>打率</td></tr>
+                  {rows.map(([id,r],i)=><tr key={i} style={i%2===0?S.tr:S.tr2}>
+                    <td style={S.tl}>{r.name}{r.HR>0&&<span style={{color:accent,fontSize:9,marginLeft:3}}>{r.HR}発</span>}</td>
+                    <td style={{textAlign:"center",color:r.pos==="代打"?"#c8c870":"#7a9a7a",fontSize:9}}>{r.pos||""}</td>
+                    <td style={{textAlign:"right"}}>{r.AB}</td>
+                    <td style={{textAlign:"right",color:r.H>0?"#a8e0a8":"#888"}}>{r.H}</td>
+                    <td style={{textAlign:"right",color:r.HR>0?accent:"#888"}}>{r.HR||0}</td>
+                    <td style={{textAlign:"right"}}>{r.RBI}</td>
+                    <td style={{textAlign:"right"}}>{r.BB}</td>
+                    <td style={{textAlign:"right",color:r.SO>2?"#e08080":"#888"}}>{r.SO}</td>
+                    <td style={{textAlign:"right",color:"#7ec87e",fontFamily:"'Roboto Mono',monospace"}}>{avgOf(id)}</td>
+                  </tr>)}
+                </tbody></table></div>
+              </div>);
+            };
+            const PitTable=({team,pitBox,wpName,lpName,svName})=>{
+              if(!pitBox||!pitBox.length)return null;
+              return(<div style={{marginTop:10}}>
+                <div style={{fontSize:10,color:"#5a7a5a",marginBottom:2,fontWeight:700,letterSpacing:1}}>{team} 投手</div>
+                <div style={S.scrollX}><table style={{...S.statTable,fontSize:11}}><tbody>
+                  <tr style={S.th}><td style={{...S.tl,minWidth:80}}>投手</td><td style={{textAlign:"right",width:32}}>回</td><td style={{textAlign:"right",width:28}}>安打</td><td style={{textAlign:"right",width:28}}>自責</td><td style={{textAlign:"right",width:28}}>四球</td><td style={{textAlign:"right",width:28}}>三振</td><td style={{textAlign:"right",width:38,color:"#7ec87e"}}>防御率</td><td style={{textAlign:"center",width:22}}></td></tr>
+                  {pitBox.map((r,i)=>{
+                    const note=r.name===wpName?"勝":r.name===lpName?"負":r.name===svName?"S":"";
+                    return(<tr key={i} style={i%2===0?S.tr:S.tr2}>
+                      <td style={S.tl}>{r.name}</td>
+                      <td style={{textAlign:"right"}}>{r.ip}</td>
+                      <td style={{textAlign:"right"}}>{r.h}</td>
+                      <td style={{textAlign:"right",color:r.er>3?"#e08080":"#888"}}>{r.er}</td>
+                      <td style={{textAlign:"right"}}>{r.bb}</td>
+                      <td style={{textAlign:"right",color:r.so>5?"#a8e0a8":"#888"}}>{r.so}</td>
+                      <td style={{textAlign:"right",color:"#7ec87e",fontFamily:"'Roboto Mono',monospace"}}>{r.id?eraOf(r.id):"--"}</td>
+                      <td style={{textAlign:"center",color:note==="勝"?"#a8e0a8":note==="負"?"#e08080":accent,fontWeight:note?700:400}}>{note}</td>
+                    </tr>);
+                  })}
+                </tbody></table></div>
+              </div>);
+            };
+            const allHRs=[...(g.awayHRs||[]).map(h=>({...h,team:g.away})),...(g.homeHRs||[]).map(h=>({...h,team:g.home}))];
+            return(<div style={{background:"#0d1a10",border:`1px solid ${accent}`,borderRadius:4,padding:"10px 14px",marginTop:4,marginBottom:4}}>
+              {/* スコアボード（回別） */}
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                <span style={{fontSize:11,color:"#5a7a5a"}}>#{g.gameNo} スコアボード</span>
+                <button style={{background:"transparent",color:"#888",border:"none",cursor:"pointer",fontSize:15,lineHeight:1}} onClick={()=>setSelectedGame(null)}>✕</button>
               </div>
               <div style={S.scrollX}><table style={{...S.statTable,borderCollapse:"collapse",fontFamily:"'Roboto Mono',monospace",fontSize:12}}><tbody>
-                <tr style={S.th}><td style={{...S.tl,minWidth:80}}></td>{[1,2,3,4,5,6,7,8,9].map(n=><td key={n} style={{textAlign:"center",width:28}}>{n}</td>)}<td style={{textAlign:"center",width:36,color:accent}}>計</td></tr>
-                <tr style={{...S.tr}}>
-                  <td style={{...S.tl,color:sg.winner===sg.away?accent:"#d8e0d8",fontWeight:sg.winner===sg.away?700:400}}>{sg.away}</td>
-                  {innings9(sg.ai).map((r,i)=><td key={i} style={{textAlign:"center",color:r>0?"#d8e0d8":"#555"}}>{r}</td>)}
-                  <td style={{textAlign:"center",color:accent,fontWeight:700}}>{sg.awayRuns}</td>
-                </tr>
-                <tr style={S.tr2}>
-                  <td style={{...S.tl,color:sg.winner===sg.home?accent:"#d8e0d8",fontWeight:sg.winner===sg.home?700:400}}>{sg.home}</td>
-                  {innings9(sg.hi).map((r,i)=><td key={i} style={{textAlign:"center",color:r>0?"#d8e0d8":"#555"}}>{r}</td>)}
-                  <td style={{textAlign:"center",color:accent,fontWeight:700}}>{sg.homeRuns}</td>
-                </tr>
+                <tr style={S.th}><td style={{...S.tl,minWidth:80}}></td>{[1,2,3,4,5,6,7,8,9].map(n=><td key={n} style={{textAlign:"center",width:26}}>{n}</td>)}<td style={{textAlign:"center",width:34,color:accent}}>計</td></tr>
+                <tr style={S.tr}><td style={{...S.tl,color:g.winner===g.away?accent:"#d8e0d8",fontWeight:g.winner===g.away?700:400}}>{g.away}</td>{innings9(g.ai).map((r,i)=><td key={i} style={{textAlign:"center",color:r>0?"#d8e0d8":"#555"}}>{r}</td>)}<td style={{textAlign:"center",color:accent,fontWeight:700}}>{g.awayRuns}</td></tr>
+                <tr style={S.tr2}><td style={{...S.tl,color:g.winner===g.home?accent:"#d8e0d8",fontWeight:g.winner===g.home?700:400}}>{g.home}</td>{innings9(g.hi).map((r,i)=><td key={i} style={{textAlign:"center",color:r>0?"#d8e0d8":"#555"}}>{r}</td>)}<td style={{textAlign:"center",color:accent,fontWeight:700}}>{g.homeRuns}</td></tr>
               </tbody></table></div>
-              {sg.winner==="引き分け"&&<div style={{fontSize:11,color:"#7a8a7a",marginTop:4}}>引き分け（延長12回）</div>}
-              <div style={{display:"flex",gap:16,marginTop:8,fontSize:11,color:"#7a8a7a",flexWrap:"wrap"}}>
-                {sg.wpName&&<span>勝: <span style={{color:"#a8e0a8"}}>{sg.wpName}</span></span>}
-                {sg.lpName&&<span>負: <span style={{color:"#e08080"}}>{sg.lpName}</span></span>}
-                {sg.svName&&<span>S: <span style={{color:accent}}>{sg.svName}</span></span>}
+              {/* 勝敗投手 */}
+              <div style={{display:"flex",gap:14,marginTop:6,fontSize:11,color:"#7a8a7a",flexWrap:"wrap"}}>
+                {g.winner==="引き分け"&&<span style={{color:"#888"}}>延長引き分け</span>}
+                {g.wpName&&<span>勝: <b style={{color:"#a8e0a8"}}>{g.wpName}</b></span>}
+                {g.lpName&&<span>負: <b style={{color:"#e08080"}}>{g.lpName}</b></span>}
+                {g.svName&&<span>S: <b style={{color:accent}}>{g.svName}</b></span>}
               </div>
-              {(sg.awayBox||sg.homeBox||sg.awayPitBox||sg.homePitBox)&&(()=>{
-                const BatTable=({team,box})=>{
-                  if(!box)return null;
-                  const rows=Object.values(box).filter(r=>r.AB>0||r.BB>0);
-                  if(!rows.length)return null;
-                  return(<div style={{marginTop:8}}>
-                    <div style={{fontSize:10,color:"#5a7a5a",marginBottom:2}}>{team} 打撃</div>
-                    <table style={{...S.statTable,fontSize:11}}><tbody>
-                      <tr style={S.th}><td style={{...S.tl,minWidth:80}}>打者</td><td style={{textAlign:"center",width:36}}>守位</td><td style={{textAlign:"right",width:30}}>打数</td><td style={{textAlign:"right",width:30}}>安打</td><td style={{textAlign:"right",width:30}}>二塁</td><td style={{textAlign:"right",width:30}}>本塁</td><td style={{textAlign:"right",width:30}}>打点</td><td style={{textAlign:"right",width:30}}>四球</td><td style={{textAlign:"right",width:30}}>三振</td></tr>
-                      {rows.map((r,i)=><tr key={i} style={i%2===0?S.tr:S.tr2}>
-                        <td style={S.tl}>{r.name}</td>
-                        <td style={{textAlign:"center",color:r.pos==="代打"?"#c8c870":"#7a9a7a",fontSize:10}}>{r.pos||""}</td>
-                        <td style={{textAlign:"right"}}>{r.AB}</td>
-                        <td style={{textAlign:"right",color:r.H>0?"#a8e0a8":"#888"}}>{r.H}</td>
-                        <td style={{textAlign:"right",color:r._2B>0?"#c8c870":"#888"}}>{r._2B||0}</td>
-                        <td style={{textAlign:"right",color:r.HR>0?accent:"#888"}}>{r.HR}</td>
-                        <td style={{textAlign:"right"}}>{r.RBI}</td>
-                        <td style={{textAlign:"right"}}>{r.BB}</td>
-                        <td style={{textAlign:"right",color:r.SO>2?"#e08080":"#888"}}>{r.SO}</td>
-                      </tr>)}
-                    </tbody></table>
-                  </div>);
-                };
-                const PitTable=({team,pitBox,wpName,lpName,svName})=>{
-                  if(!pitBox||!pitBox.length)return null;
-                  return(<div style={{marginTop:8}}>
-                    <div style={{fontSize:10,color:"#5a7a5a",marginBottom:2}}>{team} 投手</div>
-                    <table style={{...S.statTable,fontSize:11}}><tbody>
-                      <tr style={S.th}><td style={{...S.tl,minWidth:80}}>投手</td><td style={{textAlign:"right",width:34}}>回</td><td style={{textAlign:"right",width:30}}>安打</td><td style={{textAlign:"right",width:30}}>自責</td><td style={{textAlign:"right",width:30}}>四球</td><td style={{textAlign:"right",width:30}}>三振</td><td style={{textAlign:"center",width:24}}></td></tr>
-                      {pitBox.map((r,i)=>{
-                        const note=r.name===wpName?"勝":r.name===lpName?"負":r.name===svName?"S":"";
-                        return(<tr key={i} style={i%2===0?S.tr:S.tr2}>
-                          <td style={S.tl}>{r.name}</td>
-                          <td style={{textAlign:"right"}}>{r.ip}</td>
-                          <td style={{textAlign:"right"}}>{r.h}</td>
-                          <td style={{textAlign:"right",color:r.er>3?"#e08080":"#888"}}>{r.er}</td>
-                          <td style={{textAlign:"right"}}>{r.bb}</td>
-                          <td style={{textAlign:"right",color:r.so>5?"#a8e0a8":"#888"}}>{r.so}</td>
-                          <td style={{textAlign:"center",color:note==="勝"?"#a8e0a8":note==="負"?"#e08080":accent,fontWeight:note?700:400}}>{note}</td>
-                        </tr>);
-                      })}
-                    </tbody></table>
-                  </div>);
-                };
-                return(<div style={S.scrollX}>
-                  <div style={{display:"flex",gap:16,flexWrap:"wrap"}}>
-                    <div><BatTable team={sg.away} box={sg.awayBox}/><PitTable team={sg.away} pitBox={sg.awayPitBox} wpName={sg.wpName} lpName={sg.lpName} svName={sg.svName}/></div>
-                    <div><BatTable team={sg.home} box={sg.homeBox}/><PitTable team={sg.home} pitBox={sg.homePitBox} wpName={sg.wpName} lpName={sg.lpName} svName={sg.svName}/></div>
-                  </div>
-                </div>);
-              })()}
-            </div>}
-            <div style={S.logWrap}>{filteredLog.map((g,i)=>(<div key={i} style={{...S.logRow,cursor:"pointer",background:sg?.gameNo===g.gameNo?"#1a2a20":undefined}} onClick={()=>setSelectedGame(sg?.gameNo===g.gameNo?null:g)}>
-              <span style={S.logNo}>#{g.gameNo}</span>
-              <span style={{...S.logTeam,fontWeight:g.winner===g.away?700:400,color:g.winner===g.away?accent:"#aaa"}}>{g.away}</span>
-              <span style={S.logScore}>{g.awayRuns} - {g.homeRuns}</span>
-              <span style={{...S.logTeam,fontWeight:g.winner===g.home?700:400,color:g.winner===g.home?accent:"#aaa"}}>{g.home}</span>
-              <span style={{fontSize:10,color:"#5a7a5a",marginLeft:4,whiteSpace:"nowrap"}}>
-                {g.wpName&&`勝:${g.wpName}`}{g.svName&&` S:${g.svName}`}
-              </span>
-            </div>))}</div>
+              {/* 本塁打一覧 */}
+              {allHRs.length>0&&<div style={{marginTop:6,fontSize:11,color:"#c8a050"}}>
+                本塁打：{allHRs.map((h,i)=><span key={i} style={{marginRight:10}}>{h.name} {h.no}号{h.type}（{h.team}）</span>)}
+              </div>}
+              {/* 打者・投手成績 */}
+              <div style={{display:"flex",gap:16,flexWrap:"wrap",marginTop:4}}>
+                <div><BatTable team={g.away} box={g.awayBox}/><PitTable team={g.away} pitBox={g.awayPitBox} wpName={g.wpName} lpName={g.lpName} svName={g.svName}/></div>
+                <div><BatTable team={g.home} box={g.homeBox}/><PitTable team={g.home} pitBox={g.homePitBox} wpName={g.wpName} lpName={g.lpName} svName={g.svName}/></div>
+              </div>
+            </div>);
+          };
+
+          return(<div>
+            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8,flexWrap:"wrap"}}>
+              <select style={{...S.numIn,width:"auto"}} value={logFilter||"全試合"} onChange={e=>{setLogFilter(e.target.value==="全試合"?"":e.target.value);setSelectedGame(null);}}>
+                {logTeams.map(t=><option key={t} value={t}>{t}</option>)}
+              </select>
+              <span style={{fontSize:11,color:"#5a7a5a"}}>{filteredLog.length}試合</span>
+            </div>
+            {/* カレンダー表示（月別グループ） */}
+            {MONTHS.filter(m=>byMonth[m]?.length>0).map(month=>(
+              <div key={month}>
+                <div style={{fontSize:12,fontWeight:700,color:"#5a8a5a",background:"#131f14",borderLeft:`3px solid ${accent}`,padding:"4px 10px",margin:"8px 0 4px",letterSpacing:2}}>{month}</div>
+                <div style={S.logWrap}>
+                  {byMonth[month].map((g,i)=>(
+                    <div key={i}>
+                      <div style={{...S.logRow,cursor:"pointer",background:sg?.gameNo===g.gameNo?"#1a2a1a":undefined}} onClick={()=>setSelectedGame(sg?.gameNo===g.gameNo?null:g)}>
+                        <span style={S.logNo}>#{g.gameNo}</span>
+                        <span style={{...S.logTeam,fontWeight:g.winner===g.away?700:400,color:g.winner===g.away?accent:"#aaa"}}>{g.away}</span>
+                        <span style={S.logScore}>{g.awayRuns} - {g.homeRuns}</span>
+                        <span style={{...S.logTeam,fontWeight:g.winner===g.home?700:400,color:g.winner===g.home?accent:"#aaa"}}>{g.home}</span>
+                        <span style={{fontSize:10,color:"#5a7a5a",marginLeft:4,whiteSpace:"nowrap"}}>
+                          {g.wpName&&`勝:${g.wpName}`}{g.svName&&` S:${g.svName}`}
+                        </span>
+                        {((g.homeHRs?.length||0)+(g.awayHRs?.length||0))>0&&<span style={{fontSize:10,color:"#c8a050",marginLeft:4}}>💥{(g.homeHRs?.length||0)+(g.awayHRs?.length||0)}本</span>}
+                      </div>
+                      {sg?.gameNo===g.gameNo&&<Scoreboard g={g}/>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
           </div>);
         })()}
         {statTab==="history" && (<div>
