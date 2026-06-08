@@ -530,9 +530,9 @@ function midSeasonSwap(teams,pool,batStat,pitStat,seasonNews){
       const prob=gap>25?0.20:gap>10?0.45:0.65;
       if(rnd()<prob){
         down.farm=true;
-        down.rotation=0; // SP/RP問わず2軍降格時はrotationをリセット
+        down.rotation=0;
         up.farm=false;
-        if(up.rotation===0) up.rotation=ROTATION_RP_MIN;
+        if(up.rotation===0){const usedR=new Set(tm.pitcherIds.map(id=>pool[id]).filter(p=>p&&!p.farm&&p.rotation>0).map(p=>p.rotation));let s=ROTATION_RP_MIN;while(usedR.has(s)&&s<=ROTATION_RP_MAX)s++;up.rotation=Math.min(s,ROTATION_RP_MAX);}
         if(seasonNews){seasonNews.push({type:"swap",text:`${down.name}（投）2軍降格 → ${up.name} 昇格【${teams.find(t=>t.id===down.teamId)?.name||""}】`});}
       }
     }
@@ -743,7 +743,7 @@ function processOffseason(state,season,draftPicks){const {teams,pool,career,hall
     const total=pool2.reduce((a,b)=>a+b.w,0);let r=rnd()*total;let dest=pool2[0].tm;
     for(const c of pool2){ r-=c.w; if(r<=0){dest=c.tm;break;} }
     addToTeam(dest,p);p.status="active";p.teamId=dest.id;p.yearsOnTeam=0;p.order=0;
-    if(p.kind==="pit"&&p.role==="SP")p.rotation=Math.min(6,dest.pitcherIds.filter(id=>pool[id]?.role==="SP").length);
+    if(p.kind==="pit"){if(p.role==="SP")p.rotation=Math.min(6,dest.pitcherIds.filter(id=>pool[id]?.role==="SP").length);else p.rotation=0;}
     // 人的補償：移籍先が元チームに控え選手を1人提供（desirable FA×他チーム移籍×30%）
     if(desirable&&prevTeamEntry&&dest.id!==prevTeamEntry.prevTeamId&&rnd()<0.30){
       const prevTm=teams.find(t=>t.id===prevTeamEntry.prevTeamId);
@@ -778,8 +778,8 @@ function processOffseason(state,season,draftPicks){const {teams,pool,career,hall
     if(Math.abs(tradePerf(p1)-tradePerf(p2))>40)continue; // 同程度の力量のみ
     // 交換実行
     removeFromTeam(teams,p1);removeFromTeam(teams,p2);
-    addToTeam(t2,p1);p1.teamId=t2.id;p1.yearsOnTeam=0;p1.order=0;if(p1.kind==="pit"&&p1.role==="SP")p1.rotation=Math.min(6,t2.pitcherIds.filter(id=>pool[id]?.role==="SP").length);
-    addToTeam(t1,p2);p2.teamId=t1.id;p2.yearsOnTeam=0;p2.order=0;if(p2.kind==="pit"&&p2.role==="SP")p2.rotation=Math.min(6,t1.pitcherIds.filter(id=>pool[id]?.role==="SP").length);
+    addToTeam(t2,p1);p1.teamId=t2.id;p1.yearsOnTeam=0;p1.order=0;if(p1.kind==="pit"){if(p1.role==="SP")p1.rotation=Math.min(6,t2.pitcherIds.filter(id=>pool[id]?.role==="SP").length);else p1.rotation=0;}
+    addToTeam(t1,p2);p2.teamId=t1.id;p2.yearsOnTeam=0;p2.order=0;if(p2.kind==="pit"){if(p2.role==="SP")p2.rotation=Math.min(6,t1.pitcherIds.filter(id=>pool[id]?.role==="SP").length);else p2.rotation=0;}
     if(news.trade.length<40)news.trade.push(`${p1.name}（${t1.name}）⇔ ${p2.name}（${t2.name}）`);
     tradeCount++;
   }
